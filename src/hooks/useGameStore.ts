@@ -1,27 +1,31 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { Diagram, Node, Edge, BeadKind } from '../core/diagram';
-import { createNode, createEdge, createDiagram, createPort, createTracePair, resetIdCounter } from '../core/diagram';
+import type { Diagram, Node, Edge, BeadKind, NodeType } from '../core/diagram';
+import { createNode, createEdge, createDiagram, createPort, createTracePair, resetIdCounter, cloneDiagram } from '../core/diagram';
 import type { Bead, SimulationState } from '../core/simulation';
 import { stepSimulation, createBead } from '../core/simulation';
+import { globalAnimationController } from '../core/animation';
 
-/**
- * TransientState is mutated directly (not via set()) to avoid React re-renders at 60fps.
- * This is intentional - see Zustand docs on "transient updates for frequent state changes".
- */
 interface TransientState {
   beads: Bead[];
   time: number;
 }
 
+type GameMode = 'rewrite' | 'build' | 'sandbox';
+
 interface GameState {
   diagram: Diagram;
+  targetDiagram: Diagram | null;
   selectedNodeIds: Set<string>;
   paused: boolean;
   speed: number;
+  mode: GameMode;
+  undoStack: Diagram[];
+  redoStack: Diagram[];
   _transient: TransientState;
   
-  setDiagram: (diagram: Diagram) => void;
+  setDiagram: (diagram: Diagram, addToUndo?: boolean) => void;
+  setTargetDiagram: (diagram: Diagram | null) => void;
   addNode: (node: Node) => void;
   removeNode: (nodeId: string) => void;
   moveNode: (nodeId: string, x: number, y: number) => void;
@@ -29,14 +33,20 @@ interface GameState {
   removeEdge: (edgeId: string) => void;
   selectNode: (nodeId: string, additive?: boolean) => void;
   clearSelection: () => void;
-  loadLevel: (diagram: Diagram) => void;
+  loadLevel: (diagram: Diagram, target?: Diagram | null, mode?: GameMode) => void;
   togglePause: () => void;
   setSpeed: (speed: number) => void;
+  setMode: (mode: GameMode) => void;
   injectBead: (edgeId: string, kind: BeadKind) => void;
   clearBeads: () => void;
   getBeads: () => Bead[];
   getTime: () => number;
   stepSimulation: (deltaTime: number) => void;
+  undo: () => void;
+  redo: () => void;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
+  addNodeAtPosition: (type: NodeType, x: number, y: number) => void;
 }
 
 function createInitialDiagram(): Diagram {
@@ -71,15 +81,33 @@ function createInitialDiagram(): Diagram {
   );
 }
 
+const MAX_UNDO_STACK = 50;
+
 export const useGameStore = create<GameState>()(
   subscribeWithSelector((set, get) => ({
     diagram: createInitialDiagram(),
+    targetDiagram: null,
     selectedNodeIds: new Set(),
     paused: true,
     speed: 1,
+    mode: 'rewrite' as GameMode,
+    undoStack: [],
+    redoStack: [],
     _transient: { beads: [], time: 0 },
 
-    setDiagram: (diagram) => set({ diagram }),
+    setDiagram: (diagram, addToUndo = true) => {
+      if (addToUndo) {
+        set((state) => ({
+          diagram,
+          undoStack: [...state.undoStack.slice(-MAX_UNDO_STACK + 1), state.diagram],
+          redoStack: [],
+        }));
+      } else {
+        set({ diagram });
+      }
+    },
+
+    setTargetDiagram: (targetDiagram) => set({ targetDiagram }),
 
     addNode: (node) =>
       set((state) => ({
@@ -87,6 +115,8 @@ export const useGameStore = create<GameState>()(
           ...state.diagram,
           nodes: [...state.diagram.nodes, node],
         },
+        undoStack: [...state.undoStack.slice(-MAX_UNDO_STACK + 1), state.diagram],
+        redoStack: [],
       })),
 
     removeNode: (nodeId) =>
@@ -101,6 +131,8 @@ export const useGameStore = create<GameState>()(
             (tp) => tp.traceInNodeId !== nodeId && tp.traceOutNodeId !== nodeId
           ),
         },
+        undoStack: [...state.undoStack.slice(-MAX_UNDO_STACK + 1), state.diagram],
+        redoStack: [],
       })),
 
     moveNode: (nodeId, x, y) =>
@@ -119,6 +151,8 @@ export const useGameStore = create<GameState>()(
           ...state.diagram,
           edges: [...state.diagram.edges, edge],
         },
+        undoStack: [...state.undoStack.slice(-MAX_UNDO_STACK + 1), state.diagram],
+        redoStack: [],
       })),
 
     removeEdge: (edgeId) =>
@@ -127,6 +161,8 @@ export const useGameStore = create<GameState>()(
           ...state.diagram,
           edges: state.diagram.edges.filter((e) => e.id !== edgeId),
         },
+        undoStack: [...state.undoStack.slice(-MAX_UNDO_STACK + 1), state.diagram],
+        redoStack: [],
       })),
 
     selectNode: (nodeId, additive = false) =>
@@ -142,19 +178,26 @@ export const useGameStore = create<GameState>()(
 
     clearSelection: () => set({ selectedNodeIds: new Set() }),
 
-    loadLevel: (diagram) => {
+    loadLevel: (diagram, target = null, mode = 'rewrite') => {
       get()._transient.beads = [];
       get()._transient.time = 0;
+      globalAnimationController.clear();
       set({
-        diagram,
+        diagram: cloneDiagram(diagram),
+        targetDiagram: target ? cloneDiagram(target) : null,
         selectedNodeIds: new Set(),
         paused: true,
+        mode,
+        undoStack: [],
+        redoStack: [],
       });
     },
 
     togglePause: () => set((state) => ({ paused: !state.paused })),
     
     setSpeed: (speed) => set({ speed: Math.max(0.1, Math.min(3, speed)) }),
+
+    setMode: (mode) => set({ mode }),
 
     injectBead: (edgeId, kind) => {
       const bead = createBead(kind, edgeId, 0);
@@ -184,6 +227,40 @@ export const useGameStore = create<GameState>()(
       
       state._transient.beads = newSimState.beads;
       state._transient.time = newSimState.time;
+
+      globalAnimationController.update(deltaTime);
+    },
+
+    undo: () => {
+      const state = get();
+      if (state.undoStack.length === 0) return;
+
+      const previous = state.undoStack[state.undoStack.length - 1];
+      set({
+        diagram: previous,
+        undoStack: state.undoStack.slice(0, -1),
+        redoStack: [...state.redoStack, state.diagram],
+      });
+    },
+
+    redo: () => {
+      const state = get();
+      if (state.redoStack.length === 0) return;
+
+      const next = state.redoStack[state.redoStack.length - 1];
+      set({
+        diagram: next,
+        redoStack: state.redoStack.slice(0, -1),
+        undoStack: [...state.undoStack, state.diagram],
+      });
+    },
+
+    canUndo: () => get().undoStack.length > 0,
+    canRedo: () => get().redoStack.length > 0,
+
+    addNodeAtPosition: (type, x, y) => {
+      const node = createNode(type, { x, y });
+      get().addNode(node);
     },
   }))
 );
