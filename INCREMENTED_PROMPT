@@ -1,0 +1,162 @@
+# INCREMENTED_PROMPT: Bead-Calculus Implementation Foundation
+
+## Vision Crystallization
+
+Bead-calculus is a puzzle game that teaches **equational reasoning through kinetic refactoring**. The player manipulates marble-machine circuits where:
+- **Beads are the operational semantics** (execution traces)
+- **Diagrams are the static structure** (programs)
+- **Rewrite moves are the proof steps** (equivalence proofs)
+
+The twist: the win condition isn't "make output X" — it's **QED**. Prove two machines are equivalent by transforming one into the other using only sound local rewrites.
+
+---
+
+## Core Semantic Model
+
+### The Categorical Skeleton
+
+| Game Element | Mathematical Object |
+|--------------|---------------------|
+| Wire (track segment) | Typed channel / object in category |
+| Box (gate/gadget) | Morphism `f: A → B` |
+| Sequential plug (output→input) | Composition `g ∘ f` |
+| Side-by-side placement | Tensor product `f ⊗ g` |
+| Feedback loop | Trace `Tr^X(f): A → B` from `f: A⊗X → B⊗X` |
+| Swap/crossing | Symmetric monoidal braiding |
+| Cup (pair spawner) | Unit `η: I → A* ⊗ A` |
+| Cap (pair annihilator) | Counit `ε: A ⊗ A* → I` |
+
+This is a **traced symmetric monoidal category** with optional compact-closed structure (cups/caps).
+
+### Primitive Generators (Minimal Set)
+
+1. **Identity** — straight wire (do nothing)
+2. **Swap** — crossing (symmetric braiding)
+3. **Delay** — buffer (makes time observable)
+4. **Split** — one bead becomes two (copying/fanout)
+5. **Merge** — two wires join (synchronization point)
+6. **Trace portal** — feedback loop entry/exit
+
+Linear vs Classical choice:
+- **Linear mode**: Split is restricted/costly (resource-sensitive puzzles)
+- **Classical mode**: Split is free (data-copying puzzles)
+
+---
+
+## Rewrite Moves (The Proof Vocabulary)
+
+### Currently Defined
+
+| Move | Categorical Law | Mechanical Feel |
+|------|-----------------|-----------------|
+| **Slide** | Interchange `(f⊗id) ∘ (id⊗g) = (id⊗g) ∘ (f⊗id)` | Drag independent modules past each other on parallel tracks |
+| **Straighten** | Yanking `Tr(id) = id` | Pull an empty loop taut until it vanishes |
+| **Thread** | Dinaturality / trace sliding | Lift a module across a loop junction when ports align |
+
+### Future Candidates
+
+- **Bubble** — normalize crossings into swap-layers (swap normalization)
+- **Cancel** — cup-cap elimination `ε ∘ (id ⊗ η) = id` (compact-closed)
+- **Fuse/Split** — combine/decompose composite boxes (macro operations)
+
+---
+
+## Game Modes
+
+### Mode 1: Build Puzzles
+> "Make the invariant true"
+
+Given: palette of parts + global constraint
+Goal: build a machine that satisfies the invariant
+
+Example constraints:
+- "Exactly 3 red beads must exit"
+- "No two beads arrive simultaneously at any join"
+- "Output frequency = 2× input frequency"
+- "Phase alignment between outputs A and B"
+
+### Mode 2: Rewrite Puzzles
+> "Prove these are the same machine"
+
+Given: Machine A, Machine B (observationally equivalent), limited move set
+Goal: Transform A → B (or A → canonical form) using rewrite moves
+
+Win condition: **QED** — you've proven equivalence.
+
+Beads serve as the **test oracle** — run them to verify you haven't broken behavior. Rewrite moves are the **proof steps**.
+
+---
+
+## Normalization Strategy
+
+For rewrite puzzles to be tractable, define a **canonical form**:
+
+1. **Time columns**: Everything flows left → right across discrete columns
+2. **Swap layers**: Crossings bubble to standardized positions between columns
+3. **Trace portals**: Feedback loops use explicit entry/exit modules, normalized by sliding eligible operations out of loop mouths
+
+This gives a target for normalization-by-rewrites.
+
+---
+
+## Puzzle Generation Algorithm
+
+1. Start from canonical machine C
+2. Apply random inverse rewrites to scramble → produce A (or B)
+3. Present player with A and target C (or A→B transformation)
+4. Limit available moves to tune difficulty
+5. Use bead simulation as hint system / sanity check
+
+Guarantees solvability; difficulty scales with scramble depth.
+
+---
+
+## Implementation Priorities
+
+### Phase 1: Core Engine
+- [ ] Port-graph representation (typed ports on nodes)
+- [ ] Pattern-matching rewrite engine (local subgraph replacement)
+- [ ] Bead simulation (token propagation through the graph)
+
+### Phase 2: First Playable
+- [ ] Single level teaching Slide → Straighten → Thread
+- [ ] Visual distinction: Machine view vs Diagram view toggle
+- [ ] QED stamp as win screen
+
+### Phase 3: Polish
+- [ ] Invariant visualization ("pin an invariant and watch it glow")
+- [ ] Level editor / sandbox mode
+- [ ] Puzzle pack: introduction to each rewrite move
+
+---
+
+## Design Principles
+
+1. **Local legality**: Rewrite validity is checkable by local port/type matching only
+2. **Behavior preservation**: Rewrites are sound; bead simulation is the regression oracle
+3. **Tactile clarity**: Every abstract equivalence should feel like an "obviously the same machine" physical refactor
+4. **Boundary literacy**: Teach factoring by making boundaries literal, movable, and meaningful
+
+---
+
+## Key Insight
+
+> The player is **proving diagram equalities by doing physical refactors**.
+
+Beads provide behavioral intuition. Rewrites provide structural proof. The game makes abstract algebra visceral by giving it weight, momentum, and satisfying mechanical choreography.
+
+The first level that ends with a QED stamp will already feel like sorcery.
+
+---
+
+## Next Session Focus
+
+Implement the **port-graph representation** with:
+1. Node types (identity, swap, delay, split, merge, trace-portal)
+2. Typed ports (bead-kind labels)
+3. Edge connections (port-to-port)
+4. Pattern matching for rewrite rules
+
+Then: bead simulation as a simple token-propagation loop.
+
+Target: a runnable data structure that can represent a traced monoidal diagram and step beads through it.

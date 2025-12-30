@@ -1,0 +1,101 @@
+# bead-calculus
+
+A bead-running puzzle game where **string diagrams become marble machines**.
+
+You build little kinetic contraptions—tracks, gates, splits, joins, and loops—then drop **beads (signals)** through them to see what happens. The twist: the real puzzle isn’t just “make output X.” It’s **conservation under transformation**: find the shapes that preserve an invariant, and learn to refactor machines without changing their meaning.
+
+This repo is the seed of an idea: a game that teaches **invariants, boundaries, and equivalence** through satisfying mechanical choreography. Half toy, half microscope.
+
+---
+
+## Core concept
+
+The level editor *is* a string-diagram editor in disguise:
+
+- **Tracks are wires** (typed channels that carry specific bead kinds).
+- **Gates are boxes** (primitive operations).
+- **Plugging is composition** (output → input).
+- **Side-by-side is tensor / parallel composition**.
+- **Loops are trace / feedback**.
+
+Beads provide an operational semantics: the machine “runs” as beads move. Rewrites provide the proof theory: you transform machines using **sound local equivalences**.
+
+---
+
+## Game modes (planned)
+
+### 1) Build puzzles: “Make the invariant true”
+Levels specify a global constraint and a palette of parts.
+
+Examples:
+- “Exactly 3 red beads must exit.”
+- “No two beads may arrive simultaneously at the join.”
+- “Output frequency must be 2× input frequency.”
+- “This output must be phase-aligned with that output.”
+
+The point is not “find *the* solution,” but discover which *forms* preserve the invariant.
+
+### 2) Rewrite puzzles: “Prove these are the same machine”
+You’re given Machine A and Machine B. They behave identically on all test beads (observationally equivalent), but your blueprint library only accepts a **canonical form**.
+
+Your job: use rewrite moves as proof steps to transform A → B (or A → canonical), without breaking behavior.
+
+Win condition: **QED.**
+
+---
+
+## Rewrite moves (the “proof vocabulary”)
+
+These are mechanical transformations that correspond to string-diagram equalities.
+
+1. **Slide (interchange)**  
+   Swap independent modules that live on disjoint wires.
+
+2. **Straighten (yanking)**  
+   Grab a trivial empty loop and pull it taut until it vanishes.
+
+3. **Thread (trace sliding / dinaturality)**  
+   Lift a module across a loop junction when ports align—refactor across feedback.
+
+Future moves (maybe):
+- Swap normalization (bubble crossings into swap-layers)
+- Cups/caps (paired bead creation/annihilation; compact-closed tricks)
+- Resource-sensitive duplication (linear vs classical signal flavors)
+
+---
+
+## Design goals
+
+- **Local legality:** if a rewrite is possible, it’s checkable by local port/type matching.
+- **Behavior preserved:** rewrites are *sound*; bead simulation is a regression oracle.
+- **Tactile clarity:** every abstract equivalence should feel like an “obviously the same machine” physical refactor.
+- **Boundary literacy:** teach factoring and decomposition by making boundaries literal, movable, and meaningful.
+
+---
+
+## Status
+
+Early-stage: a notebook of ideas solidifying into a repo. Expect rapid iteration and lots of “toy implementations” that prove specific mechanics.
+
+If you’re reading this and thinking “this sounds like traced monoidal categories / GoI / interaction nets but cute,” yes. That’s the vibe.
+
+---
+
+## Contributing
+
+At this stage, the most valuable contributions are:
+- small prototype experiments (graph rewrite engine, bead simulator, editor UX)
+- level ideas that teach a single equivalence cleanly
+- rewrite move proposals with clear “before/after” boundary interfaces
+
+Open an issue with:
+- the invariant
+- allowed parts
+- the intended “aha”
+- (optionally) the corresponding diagrammatic law
+
+---
+
+## License
+
+TBD (likely MIT or Apache-2.0). For now: assume “all rights reserved” until a license lands.

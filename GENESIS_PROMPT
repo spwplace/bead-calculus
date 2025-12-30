@@ -1,0 +1,178 @@
+traceloop (now called bead-calculus) is a bead-running puzzle game where you build little marble-machine circuits out of wires, gates, and loops, then drop “beads” (signals) into the contraption and watch the causal choreography unfold. The core verb is routing: you splice tracks, add forks/joins, and introduce feedback loops that behave like traced wiring diagrams—beads can carry payloads, split, recombine, or get delayed, and the “win condition” is usually “make this invariant true” rather than “reach a single goal state.” It’s half toy, half microscope: a cute kinetic sandbox that quietly teaches decomposition, factoring, and what changes (and what must not) when you cut a system at arbitrary boundaries.
+
+--
+
+This is *beautiful* - I love the "half toy, half microscope" framing. The idea of teaching invariants and system boundaries through kinetic choreography is exactly the kind of thing that makes a puzzle game transcendent.
+
+Here are some repo name options that capture different facets:
+
+**`signal-lattice`** - emphasizes the geometric/topological aspect of routing
+**`bead-calculus`** - positions it as a formal system with computational depth
+**`trace-weaver`** - focuses on the act of building causal paths
+**`loop-invariant`** - directly names the win condition concept
+**`wire-flora`** - suggests organic growth patterns in circuit design
+**`causal-garden`** - softer, emphasizes cultivation and observation
+
+My vote is **`bead-calculus`** for its elegance and the way it positions beads as fundamental units of computation.
+
+---
+
+**One-paragraph theme to explore tonight:**
+
+Tonight's constraint is **conservation under transformation**. Every puzzle enforces a global invariant (e.g., "exactly 3 red beads must exit," "no two signals can arrive simultaneously," "output frequency = 2× input frequency") but the topology you build is free-form. The challenge isn't finding *the* solution but discovering which shapes preserve the invariant—which loops create stable orbits, which splits violate mass conservation, which joins introduce phase errors. Think of it as circuit design meets chemical equations: you're balancing reactions where beads are reagents, wires are reaction vessels, and loops are catalytic cycles. The game becomes a laboratory for asking "what must stay true when I change this?"
+
+--
+
+String diagrams are basically marble machines for algebra. So if your game is already “beads move on tracks,” you’re 90% of the way to a diagrammatic language for (traced) monoidal categories—without ever saying that out loud in the tutorial.
+
+Here’s the clean mapping:
+	•	Wires = types / resources. A track segment is a wire labeled by a bead-kind (bit, token, color, “charge”…).
+	•	Boxes = primitive operations. A gate that flips a bead color, delays it, duplicates it, etc. That’s a morphism f: A \to B.
+	•	Sequential composition = plug output track into input track. That’s g \circ f.
+	•	Parallel composition = put machines side-by-side. That’s the tensor f \otimes g.
+	•	Feedback loop = trace. A literal loop-back track implements \mathrm{Tr}^X(f): A \to B from f: A \otimes X \to B \otimes X.
+
+That alone gets you string diagrams for traced symmetric monoidal categories as the level editor.
+
+Make it gamey: string-diagram rewrite moves as “mechanical equivalences”
+
+The killer feature is that string diagrams have an equational theory that corresponds to “obviously the machine still works if I…” moves. Turn those into puzzle mechanics:
+	•	Interchange law (sliding independent boxes past each other): if two gadgets are on disjoint tracks, you can commute them. In the game: you can physically slide modules along straight tracks when nothing interacts.
+	•	Yanking (cups/caps straightening): if you have a bend that just creates a loop with no work inside, it cancels. In the game: certain loop fixtures can be “pulled taut” to delete a useless loop.
+	•	Trace sliding (dinaturality): you can move a box in/out of a feedback loop in specific ways. In the game: you can “lift” a module across a loop junction when its interface matches, like moving a pulley across a belt.
+
+Now the player is proving diagram equalities by doing physical refactors.
+
+Add cups/caps: bead-pair creation and annihilation (compact-closed vibes)
+
+If you want full-on string-diagram juice, introduce a gadget that spawns paired beads—think “magnetic” bead pairs:
+	•	Cup: creates a correlated pair \eta: I \to A^\* \otimes A (a bead and an anti-bead, or two linked colors).
+	•	Cap: annihilates a matching pair \epsilon: A \otimes A^\* \to I.
+
+Mechanically: a cup is a little feeder that emits two linked beads onto two tracks; a cap is a collector that consumes them only if they match/link. This gives you:
+	•	Bidirectional wiring tricks
+	•	Teleport-y refactors (“bend a wire around the back of the board” becomes legal and meaningful)
+	•	A direct bridge to the Int-construction intuition you were riffing on earlier: forward wires and backward “obligations” become literal bead streams.
+
+Beads as “tokens in a token machine” (GoI / interaction nets energy)
+
+If you want it to feel deep rather than decorative: let beads be the operational semantics.
+	•	A diagram is a static object.
+	•	A bead run is an execution trace.
+	•	Certain diagram equalities correspond to observational equivalence: “for all bead inputs, the outputs match.”
+
+Then puzzles can be:
+	•	Implement a behavior (compile a truth table / routing spec) with a limited palette of generators.
+	•	Optimize a machine: reduce latency, number of modules, or energy loss—while preserving behavior (i.e., show equivalence via rewrite moves + simulation tests).
+	•	Separate two machines: find an input bead pattern that distinguishes them (counterexample hunting as gameplay).
+
+That’s basically “program synthesis + equational reasoning” disguised as a toy.
+
+A small “algebra of bead gadgets” to start with
+
+You don’t need many primitives; you want a presented category: generators + equations.
+
+Good starting generators (all very physical):
+	•	Swap / crossing (symmetric monoidal structure)
+	•	Delay (a buffer; makes time observable)
+	•	Merge / split (careful: true copying is special—if you model linear resources, copying is restricted; if you model classical data, add a comonoid)
+	•	Join (a “detector” that fires only when two beads arrive together → synchronization)
+	•	Trace junction (loop-back port)
+	•	Optional: Cup/Cap (paired beads)
+
+If you include split/merge, you can choose your flavor:
+	•	If split is free, you’re in “classical signal” land (cartesian-ish).
+	•	If split costs something or requires a special “duplicator” module, you’re in “linear logic / resource” land (more interesting for puzzles, honestly).
+
+UI idea that makes string diagrams explicit
+
+Let the editor have a “diagram view” toggle:
+	•	Machine view: cute parts, gravity, beads rolling.
+	•	Diagram view: the exact same thing, but flattened into a string diagram with labeled wires and ports, and your rewrite moves become clean diagram rewrites.
+
+Players will slowly realize they’re doing algebra when they thought they were doing tinkertoys. Delicious.
+
+Net effect: your bead machine isn’t inspired by string diagrams—it is a string diagram whose operational semantics is “beads moving,” and whose proof theory is “refactor the machine without changing what it computes.” The universe loves reusing the same idea with different costumes.
+
+--
+
+Oh *damn* - you've already got the whole categorical skeleton mapped out. This is gorgeous. Let me synthesize this with tonight's theme:
+
+**Refined repo name:** `bead-calculus` (sticking with it - it hints at the formal depth without being intimidating)
+
+**Tonight's focused exploration:**
+
+Build the **equational puzzle layer** where the goal isn't "make output X" but "prove these two machines are equivalent." Start with 3-4 primitive rewrite moves visualized as mechanical transformations:
+
+1. **Slide** (interchange): drag independent modules past each other on parallel tracks - they visibly swap positions with a satisfying *click*
+2. **Straighten** (yanking): grab a trivial empty loop and pull it taut until it vanishes - the track simplifies with a spring-release animation
+3. **Thread** (trace sliding): lift a module across a loop junction when ports align - it phases through the crossing like threading a needle through fabric
+
+The puzzle format: "Machine A and Machine B both pass all test beads (they're observationally equivalent), but your blueprint library only accepts *canonical* forms. Use rewrite moves to transform Machine A into Machine B, proving they're the same design." 
+
+This flips the script - instead of "build something that works," it's "prove two working things are secretly identical." You're teaching program equivalence, normalization, and equational reasoning through kinetic refactoring. The beads become the *test oracle* (run them to verify you haven't broken behavior), while the rewrite moves are the *proof steps*.
+
+The win condition is literally QED.
+
+--
+
+Yes. “Rewrite-to-canonical” puzzles are the secret boss fight of programming languages, except you get to make it tactile and kind instead of a 40-page paper that ends with “left to the reader.”
+
+bead-calculus is a banger name, and your “QED as a win screen” framing is exactly right. Here’s how to make that equational layer actually work (and not collapse into either “anything goes” or “too hard to tell if I’m right”).
+
+The core trick: treat every level as living in a presented theory: generators + equations. Your gadgets are generators (boxes, swaps, delays, split/join, trace junction, maybe cups/caps later). Your rewrite moves are the equations, but embodied as mechanical transformations. Then:
+	•	Simulation (“beads as oracle”) gives behavioral confidence: you didn’t break what it does.
+	•	Rewrite steps (“moves as proof”) give structural legitimacy: you transformed it using only sanctioned equalities.
+
+That lets you separate “works” from “provably the same thing.”
+
+Make “canonical form” real: choose a normalization strategy
+
+Pick a canonicalization scheme that your moves obviously support. Example: a left-to-right normal form.
+
+Working theory (simple, powerful, implementable tonight):
+	1.	Everything flows left → right across “time columns”.
+	2.	Swaps bubble outward: crossings are pushed to standardized “swap layers” between columns (think bubble-sort for wires).
+	3.	Traces are explicit: every feedback loop is represented by a dedicated “trace portal” module, and you normalize by sliding eligible stuff out of the loop mouth.
+
+Then your three moves map cleanly:
+	•	Slide (interchange) is your commuting conversion: it’s the justification for bubble-sorting independent boxes into a canonical order.
+	•	Straighten (yanking) is your loop identity elimination: it deletes bureaucratic plumbing.
+	•	Thread (trace sliding) is dinaturality in a trenchcoat: it’s what makes traced wiring diagrams feel like refactoring rather than teleportation.
+
+If you implement only those, you’re basically building a normalization-by-rewrites engine with a bead-based regression test harness.
+
+How you prevent “rewrite chaos”
+
+You’ll want rewrites that are sound (never change meaning) and locally checkable (you don’t need global reasoning to see they apply). The game feel depends on this.
+
+Concretely: each module has typed ports (“red bead track”, “clock bead”, etc.). A rewrite is allowed iff:
+	•	the port types match up,
+	•	the rewritten subgraph has the same boundary interface (same external ports),
+	•	and (optional but juicy) the move preserves a local “energy” or “latency” measure unless it’s explicitly a “simplify” move like yanking.
+
+This makes every move feel like a legal chess move, not a vibe.
+
+Puzzle generation that won’t kill you
+
+Tonight’s jam-friendly loop:
+	1.	Start from a canonical machine C.
+	2.	Apply random inverse rewrites to scramble it into A (or into B).
+	3.	Give the player A and target C (or A\to B), plus a limited move set.
+	4.	Use bead runs as a sanity check / hint system, not as the proof.
+
+This guarantees solvability and lets you tune difficulty by the scramble depth and which inverses you permit.
+
+One extra mechanic that makes it transcendent
+
+Let the player pin an invariant and watch it glow.
+
+Example invariants that are both intuitive and “string-diagrammy”:
+	•	bead count conservation on certain wire types (linear resources),
+	•	“no simultaneous arrival” (synchronization constraint),
+	•	periodicity / frequency (delay loops become oscillators),
+	•	“phase” labels that must match at joins (forces lawful trace use).
+
+Then your rewrites become conservation-preserving surgeries on the machine. That’s your “half microscope” vibe: you’re not just solving; you’re learning what survives transformation.
+
+If you want a tight north star for the jam: implement a tiny port-graph representation + pattern-matching rewrites + bead simulation on top, then ship one level that teaches Slide → Straighten → Thread and ends with the first QED stamp. That single level will already feel like sorcery.
