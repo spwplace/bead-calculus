@@ -1,0 +1,38 @@
+  ┃    97   // From ses_49255ad3affeqbvf1E0hXdxAdR (second wave)
+  ┃    98   "read @README and @GENESIS_PROMPT and @INCREMENTED_PROMPT and etc and let's keep implementing this game. i think
+  ┃       last time we were int he middle of ensuring the completeness of the string diagram formulation and some of the
+  ┃       optional \"maybe\" features",
+  ┃    99   "Let's do all of that!!!",
+  ┃   100   "Ok so reading all the initial design specs are we done? Or are we just mathematically complete? Is it fun? Is the
+  ┃       UI excellent? mobile compatible?",
+  ┃   101   "Ok, I want you to implement everything you mentioned earlier before i interrogated u about the incremented prompt
+  ┃       ahaha.",
+  ┃   102
+  ┃   103   // From ses_491f26cffffe2C84V1e6GD3R06 (final planner session)
+  ┃   104   "Let's keep working on this game",
+  ┃   105   "i guess just figure out how to make it fun and good UI instead of the current boring hell",
+  ┃   106   "Is the strimg diagram theory sound? are the levels \"hard\"? i never know what a rewrite button is about to do or
+  ┃       already did",
+  ┃   107   "b. then a",
+  ┃   108   "Go for it boss.",
+  ┃   109   "ok.",
+  ┃   110   "This game still just isn't FUN.",
+  ┃   111
+  ┃   112   // From ses_492b11caeffekpjZ7QpCvzc3MN (first dev wave)
+  ┃   113   "@plan read @README and @GENESIS_PROMPT and write out INCREMENTED_PROMPT which will be the basis of the effort in
+  ┃       the next agent context.",
+  ┃   114   "@build implement this game as a mobile-compatible web experience with modern typescript",
+  ┃   115   "@build put together a nice .github configuration and deploys pages for spwplace.github.io/bead-calculus",
+  ┃   116   "@librarian how do you feel about all the code that was just written?",
+  ┃   117   "Seems like we have some problems to address, go for it.",
+  ┃   118   "(keep it up)",
+  ┃   119   "Did we finish implementing the game as designed? What's going on?",
+  ┃   120   "Are we missing any mathematics in the model?",
+  ┃   121   "Yes, all of that needs to be addressed thoroughly.",
+  ┃   122   "Let's wrok on that superposing law",
+  ┃   123   "Are we missing node types or other categorical laws? Do we have a complete string diagram engine now?",
+  ┃   124   "Yeah please. Let's bring this up to a \"full completeness\" (include cups/caps too!). do all them",
+  ┃   125   "Continue",
+  ┃   126   "Ok",
+  ┃   127   "Continue",
+  ┃   128
