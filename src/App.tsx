@@ -11,7 +11,7 @@ import { applyRewrite, findAllRewriteMatches } from './core/rewrite';
 import { countBeadsByKind, countActiveBeads } from './core/invariant';
 import { TUTORIAL_LEVELS, type Level } from './levels/tutorial';
 import type { NodeType } from './core/diagram';
-import { createDiagram } from './core/diagram';
+import { createDiagram, BEAD_COLORS } from './core/diagram';
 import { soundEngine, initSoundOnInteraction, triggerHaptic } from './core/sound';
 
 export default function App() {
@@ -36,6 +36,8 @@ export default function App() {
     mode,
     setMode,
     addNodeAtPosition,
+    hasWon,
+    getCollectedBeads,
   } = useGameStore();
 
   const [viewMode, setViewMode] = useState<'machine' | 'diagram'>('machine');
@@ -46,6 +48,8 @@ export default function App() {
   const [currentLevel, setCurrentLevel] = useState<Level | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(true);
   const [_draggingNodeType, setDraggingNodeType] = useState<NodeType | null>(null);
+  const [showWin, setShowWin] = useState(false);
+  const [collectedBeadsCounts, setCollectedBeadsCounts] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
     initSoundOnInteraction();
@@ -56,11 +60,28 @@ export default function App() {
       const beads = getBeads();
       setBeadCount(countActiveBeads(beads));
       setBeadCounts(countBeadsByKind(beads));
+      
+      const collected = getCollectedBeads();
+      const counts = new Map<string, number>();
+      for (const [_portId, kinds] of collected) {
+        for (const kind of kinds) {
+          counts.set(kind, (counts.get(kind) ?? 0) + 1);
+        }
+      }
+      setCollectedBeadsCounts(counts);
     }, 100);
     return () => clearInterval(interval);
-  }, [getBeads]);
+  }, [getBeads, getCollectedBeads]);
 
-  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    if (hasWon && !showWin) {
+      setShowWin(true);
+      soundEngine.playQED();
+      triggerHaptic('success');
+      setTimeout(() => setShowWin(false), 3000);
+    }
+  }, [hasWon, showWin]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
@@ -99,22 +120,39 @@ export default function App() {
   }, [diagram, setDiagram]);
 
   const handleInjectBead = useCallback(() => {
-    if (diagram.edges.length > 0) {
+    if (currentLevel?.inputBeads && currentLevel.inputBeads.length > 0) {
+      for (const inputBead of currentLevel.inputBeads) {
+        const edgeId = diagram.edges[inputBead.edgeIndex]?.id;
+        if (edgeId) {
+          if (inputBead.delay && inputBead.delay > 0) {
+            setTimeout(() => {
+              injectBead(edgeId, inputBead.color);
+              soundEngine.playBeadDrop();
+            }, inputBead.delay);
+          } else {
+            injectBead(edgeId, inputBead.color);
+            soundEngine.playBeadDrop();
+          }
+        }
+      }
+      triggerHaptic('light');
+    } else if (diagram.edges.length > 0) {
       injectBead(diagram.edges[0].id, 'signal');
       soundEngine.playBeadDrop();
       triggerHaptic('light');
     }
-  }, [diagram.edges, injectBead]);
+  }, [diagram.edges, injectBead, currentLevel]);
 
   const handleSelectLevel = useCallback((level: Level) => {
-    loadLevel(level.initial);
+    loadLevel(level.initial, level.target, level.mode, level.winCondition);
     setCurrentLevel(level);
     setShowLevelSelector(false);
     setShowOnboarding(true);
+    setShowWin(false);
   }, [loadLevel]);
 
   const handleEnterSandbox = useCallback(() => {
-    loadLevel(createDiagram(), null, 'sandbox');
+    loadLevel(createDiagram(), null, 'sandbox', null);
     setCurrentLevel(null);
     setShowLevelSelector(false);
     setMode('sandbox');
@@ -184,10 +222,27 @@ export default function App() {
 
         <BeadCounter counts={beadCounts} total={beadCount} />
 
-        {showQED && (
+        {collectedBeadsCounts.size > 0 && (
+          <div className="absolute top-4 right-4 bg-[#1a1a2e]/90 px-3 py-2 rounded-lg border border-[#2a2a4e]">
+            <div className="text-xs text-[#94a3b8] mb-1">Collected</div>
+            <div className="flex gap-2">
+              {Array.from(collectedBeadsCounts.entries()).map(([kind, count]) => (
+                <div key={kind} className="flex items-center gap-1">
+                  <div 
+                    className="w-4 h-4 rounded-full" 
+                    style={{ backgroundColor: BEAD_COLORS[kind as keyof typeof BEAD_COLORS] }}
+                  />
+                  <span className="text-sm text-[#e2e8f0]">{count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {(showQED || showWin) && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/60 animate-fade-in">
             <div className="text-6xl font-bold text-[#22c55e] animate-bounce">
-              QED
+              {showWin ? 'WIN!' : 'QED'}
             </div>
           </div>
         )}

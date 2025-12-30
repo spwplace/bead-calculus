@@ -5,13 +5,16 @@ import { createNode, createEdge, createDiagram, createPort, createTracePair, res
 import type { Bead, SimulationState } from '../core/simulation';
 import { stepSimulation, createBead } from '../core/simulation';
 import { globalAnimationController } from '../core/animation';
+import type { WinCondition } from '../core/winCondition';
+import { checkWinCondition } from '../core/winCondition';
 
 interface TransientState {
   beads: Bead[];
   time: number;
+  collectedBeads: Map<string, BeadKind[]>;
 }
 
-type GameMode = 'rewrite' | 'build' | 'sandbox';
+type GameMode = 'rewrite' | 'build' | 'sandbox' | 'play';
 
 interface GameState {
   diagram: Diagram;
@@ -22,6 +25,8 @@ interface GameState {
   mode: GameMode;
   undoStack: Diagram[];
   redoStack: Diagram[];
+  winCondition: WinCondition | null;
+  hasWon: boolean;
   _transient: TransientState;
   
   setDiagram: (diagram: Diagram, addToUndo?: boolean) => void;
@@ -33,7 +38,7 @@ interface GameState {
   removeEdge: (edgeId: string) => void;
   selectNode: (nodeId: string, additive?: boolean) => void;
   clearSelection: () => void;
-  loadLevel: (diagram: Diagram, target?: Diagram | null, mode?: GameMode) => void;
+  loadLevel: (diagram: Diagram, target?: Diagram | null, mode?: GameMode, winCondition?: WinCondition | null) => void;
   togglePause: () => void;
   setSpeed: (speed: number) => void;
   setMode: (mode: GameMode) => void;
@@ -41,12 +46,14 @@ interface GameState {
   clearBeads: () => void;
   getBeads: () => Bead[];
   getTime: () => number;
+  getCollectedBeads: () => Map<string, BeadKind[]>;
   stepSimulation: (deltaTime: number) => void;
   undo: () => void;
   redo: () => void;
   canUndo: () => boolean;
   canRedo: () => boolean;
   addNodeAtPosition: (type: NodeType, x: number, y: number) => void;
+  setWinCondition: (condition: WinCondition | null) => void;
 }
 
 function createInitialDiagram(): Diagram {
@@ -93,7 +100,9 @@ export const useGameStore = create<GameState>()(
     mode: 'rewrite' as GameMode,
     undoStack: [],
     redoStack: [],
-    _transient: { beads: [], time: 0 },
+    winCondition: null,
+    hasWon: false,
+    _transient: { beads: [], time: 0, collectedBeads: new Map() },
 
     setDiagram: (diagram, addToUndo = true) => {
       if (addToUndo) {
@@ -178,9 +187,10 @@ export const useGameStore = create<GameState>()(
 
     clearSelection: () => set({ selectedNodeIds: new Set() }),
 
-    loadLevel: (diagram, target = null, mode = 'rewrite') => {
+    loadLevel: (diagram, target = null, mode = 'rewrite', winCondition = null) => {
       get()._transient.beads = [];
       get()._transient.time = 0;
+      get()._transient.collectedBeads = new Map();
       globalAnimationController.clear();
       set({
         diagram: cloneDiagram(diagram),
@@ -190,6 +200,8 @@ export const useGameStore = create<GameState>()(
         mode,
         undoStack: [],
         redoStack: [],
+        winCondition,
+        hasWon: false,
       });
     },
 
@@ -207,10 +219,13 @@ export const useGameStore = create<GameState>()(
     clearBeads: () => {
       get()._transient.beads = [];
       get()._transient.time = 0;
+      get()._transient.collectedBeads = new Map();
+      set({ hasWon: false });
     },
 
     getBeads: () => get()._transient.beads,
     getTime: () => get()._transient.time,
+    getCollectedBeads: () => get()._transient.collectedBeads,
 
     stepSimulation: (deltaTime) => {
       const state = get();
@@ -221,12 +236,21 @@ export const useGameStore = create<GameState>()(
         time: state._transient.time,
         paused: state.paused,
         speed: state.speed,
+        collectedBeads: state._transient.collectedBeads,
       };
 
       const newSimState = stepSimulation(simState, state.diagram, deltaTime);
       
       state._transient.beads = newSimState.beads;
       state._transient.time = newSimState.time;
+      state._transient.collectedBeads = newSimState.collectedBeads;
+
+      if (state.winCondition && !state.hasWon) {
+        const result = checkWinCondition(state.winCondition, newSimState.collectedBeads);
+        if (result.won) {
+          set({ hasWon: true });
+        }
+      }
 
       globalAnimationController.update(deltaTime);
     },
@@ -262,5 +286,7 @@ export const useGameStore = create<GameState>()(
       const node = createNode(type, { x, y });
       get().addNode(node);
     },
+
+    setWinCondition: (condition) => set({ winCondition: condition }),
   }))
 );

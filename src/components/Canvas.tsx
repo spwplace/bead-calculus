@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useGesture } from '@use-gesture/react';
-import type { Diagram, Node } from '../core/diagram';
+import type { Diagram, Node, PainterConfig, FilterConfig } from '../core/diagram';
 import { NODE_DIMENSIONS, BEAD_COLORS } from '../core/diagram';
 import type { Bead } from '../core/simulation';
 import { getPortPosition, bezierPoint, getEdgeControlPoints } from '../utils/geometry';
@@ -376,6 +376,8 @@ function drawDiagramNode(
     'counit': 'ε',
     'cup': '∪',
     'cap': '∩',
+    'painter': 'P',
+    'filter': 'F',
   };
   
   ctx.fillText(shortNames[node.type] || node.type, x + dims.width / 2, y + dims.height / 2);
@@ -490,6 +492,62 @@ function drawNodeDecoration(
       ctx.moveTo(x + dims.width / 2 + 4, y + dims.height / 2 - 4);
       ctx.lineTo(x + dims.width / 2 - 4, y + dims.height / 2 + 4);
       ctx.stroke();
+      break;
+    }
+    case 'painter': {
+      const config = node.config as PainterConfig | undefined;
+      const targetColor = config?.targetColor ?? 'signal';
+      const colorHex = BEAD_COLORS[targetColor];
+      
+      ctx.fillStyle = colorHex;
+      ctx.beginPath();
+      ctx.arc(x + dims.width / 2, y + dims.height / 2, 12, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x + dims.width / 2, y + dims.height / 2, 12, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(x + dims.width / 2 - 4, y + dims.height / 2 + 6);
+      ctx.lineTo(x + dims.width / 2 + 4, y + dims.height / 2 + 6);
+      ctx.lineTo(x + dims.width / 2, y + dims.height / 2 - 6);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case 'filter': {
+      const config = node.config as FilterConfig | undefined;
+      const matchColor = config?.matchColor ?? 'signal';
+      const colorHex = BEAD_COLORS[matchColor];
+      
+      ctx.fillStyle = colorHex;
+      ctx.beginPath();
+      ctx.moveTo(x + dims.width / 2, y + 8);
+      ctx.lineTo(x + dims.width - 8, y + dims.height / 2);
+      ctx.lineTo(x + dims.width / 2, y + dims.height - 8);
+      ctx.lineTo(x + 8, y + dims.height / 2);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + dims.width / 2, y + 8);
+      ctx.lineTo(x + dims.width - 8, y + dims.height / 2);
+      ctx.lineTo(x + dims.width / 2, y + dims.height - 8);
+      ctx.lineTo(x + 8, y + dims.height / 2);
+      ctx.closePath();
+      ctx.stroke();
+      
+      ctx.font = 'bold 10px system-ui';
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('?', x + dims.width / 2, y + dims.height / 2);
       break;
     }
   }
@@ -793,6 +851,8 @@ function getNodeLabel(type: Node['type']): string {
     'counit': '*',
     'cup': 'U',
     'cap': 'n',
+    'painter': 'P',
+    'filter': 'F',
   };
   return labels[type];
 }

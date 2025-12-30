@@ -1,9 +1,25 @@
-export type BeadKind = 'red' | 'blue' | 'green' | 'signal';
+export type BeadKind = 
+  | 'red' 
+  | 'blue' 
+  | 'green' 
+  | 'yellow' 
+  | 'purple' 
+  | 'orange' 
+  | 'cyan' 
+  | 'white' 
+  | 'black'
+  | 'signal';
 
 export const BEAD_COLORS: Record<BeadKind, string> = {
   red: '#ef4444',
   blue: '#3b82f6',
   green: '#22c55e',
+  yellow: '#eab308',
+  purple: '#a855f7',
+  orange: '#f97316',
+  cyan: '#06b6d4',
+  white: '#f8fafc',
+  black: '#1e293b',
   signal: '#f59e0b',
 };
 
@@ -24,7 +40,19 @@ export type NodeType =
   | 'unit'
   | 'counit'
   | 'cup'
-  | 'cap';
+  | 'cap'
+  | 'painter'
+  | 'filter';
+
+export interface PainterConfig {
+  targetColor: BeadKind;
+}
+
+export interface FilterConfig {
+  matchColor: BeadKind;
+}
+
+export type NodeConfig = PainterConfig | FilterConfig;
 
 export const NODE_DIMENSIONS: Record<NodeType, { width: number; height: number }> = {
   'identity': { width: 40, height: 40 },
@@ -38,6 +66,8 @@ export const NODE_DIMENSIONS: Record<NodeType, { width: number; height: number }
   'counit': { width: 40, height: 40 },
   'cup': { width: 60, height: 50 },
   'cap': { width: 60, height: 50 },
+  'painter': { width: 60, height: 50 },
+  'filter': { width: 60, height: 70 },
 };
 
 export const NODE_NAMES: Record<NodeType, string> = {
@@ -52,6 +82,8 @@ export const NODE_NAMES: Record<NodeType, string> = {
   'counit': 'Sink',
   'cup': 'Cup',
   'cap': 'Cap',
+  'painter': 'Painter',
+  'filter': 'Filter',
 };
 
 export interface Node {
@@ -60,6 +92,7 @@ export interface Node {
   inputs: Port[];
   outputs: Port[];
   position: { x: number; y: number };
+  config?: NodeConfig;
 }
 
 export interface Edge {
@@ -133,6 +166,10 @@ function getDefaultPorts(type: NodeType): { inputs: BeadKind[]; outputs: BeadKin
       return { inputs: [], outputs: ['signal', 'signal'] };
     case 'cap':
       return { inputs: ['signal', 'signal'], outputs: [] };
+    case 'painter':
+      return { inputs: ['signal'], outputs: ['signal'] };
+    case 'filter':
+      return { inputs: ['signal'], outputs: ['signal', 'signal'] };
     default:
       return { inputs: [], outputs: [] };
   }
@@ -141,7 +178,8 @@ function getDefaultPorts(type: NodeType): { inputs: BeadKind[]; outputs: BeadKin
 export function createNode(
   type: NodeType,
   position: { x: number; y: number },
-  portConfig?: { inputs?: BeadKind[]; outputs?: BeadKind[] }
+  portConfig?: { inputs?: BeadKind[]; outputs?: BeadKind[] },
+  config?: NodeConfig
 ): Node {
   const defaultPorts = getDefaultPorts(type);
   const inputKinds = portConfig?.inputs ?? defaultPorts.inputs;
@@ -153,6 +191,7 @@ export function createNode(
     inputs: inputKinds.map(kind => createPort(kind, 'input')),
     outputs: outputKinds.map(kind => createPort(kind, 'output')),
     position,
+    config,
   };
 }
 

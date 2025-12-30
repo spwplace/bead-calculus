@@ -10,7 +10,11 @@ type SoundType =
   | 'node-place'
   | 'node-delete'
   | 'undo'
-  | 'error';
+  | 'error'
+  | 'painter-spray'
+  | 'filter-sort'
+  | 'win-chime'
+  | 'wrong-output';
 
 interface OscillatorConfig {
   type: OscillatorType;
@@ -86,6 +90,24 @@ const SOUND_CONFIGS: Record<SoundType, SoundConfig[]> = {
   'error': [
     { oscillators: [{ type: 'sawtooth', frequency: 150, duration: 0.2, gain: 0.2 }] },
     { oscillators: [{ type: 'sawtooth', frequency: 120, duration: 0.25, gain: 0.15 }], delay: 0.1 },
+  ],
+  'painter-spray': [
+    { oscillators: [{ type: 'sine', frequency: 600, duration: 0.08, gain: 0.2 }] },
+    { oscillators: [{ type: 'sine', frequency: 800, duration: 0.08, gain: 0.15 }], delay: 0.03 },
+    { oscillators: [{ type: 'sine', frequency: 1000, duration: 0.1, gain: 0.1 }], delay: 0.06 },
+  ],
+  'filter-sort': [
+    { oscillators: [{ type: 'triangle', frequency: 500, duration: 0.05, gain: 0.2 }] },
+    { oscillators: [{ type: 'triangle', frequency: 700, duration: 0.05, gain: 0.15 }], delay: 0.03 },
+  ],
+  'win-chime': [
+    { oscillators: [{ type: 'sine', frequency: 523, duration: 0.2, gain: 0.25 }] },
+    { oscillators: [{ type: 'sine', frequency: 659, duration: 0.2, gain: 0.25 }], delay: 0.1 },
+    { oscillators: [{ type: 'sine', frequency: 784, duration: 0.3, gain: 0.2 }], delay: 0.2 },
+  ],
+  'wrong-output': [
+    { oscillators: [{ type: 'sawtooth', frequency: 200, duration: 0.15, gain: 0.2 }] },
+    { oscillators: [{ type: 'sawtooth', frequency: 150, duration: 0.2, gain: 0.15 }], delay: 0.08 },
   ],
 };
 
@@ -266,6 +288,22 @@ class SoundEngine {
 
   playError(): void {
     this.play('error');
+  }
+
+  playPainterSpray(): void {
+    this.play('painter-spray');
+  }
+
+  playFilterSort(): void {
+    this.play('filter-sort');
+  }
+
+  playWinChime(): void {
+    this.play('win-chime');
+  }
+
+  playWrongOutput(): void {
+    this.play('wrong-output');
   }
 }
 

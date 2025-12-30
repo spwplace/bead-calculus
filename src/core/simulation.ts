@@ -1,5 +1,10 @@
-import type { Diagram, Node, BeadKind, Edge } from './diagram';
+import type { Diagram, Node, BeadKind, Edge, PainterConfig, FilterConfig } from './diagram';
 import { findNode, findEdgesFromPort, findTracePairByTraceOut } from './diagram';
+
+export interface CollectedBeads {
+  byPort: Map<string, BeadKind[]>;
+  total: number;
+}
 
 export interface Bead {
   id: string;
@@ -19,6 +24,7 @@ export interface SimulationState {
   time: number;
   paused: boolean;
   speed: number;
+  collectedBeads: Map<string, BeadKind[]>;
 }
 
 let beadIdCounter = 0;
@@ -56,6 +62,7 @@ export function createSimulationState(): SimulationState {
     time: 0,
     paused: true,
     speed: 1,
+    collectedBeads: new Map(),
   };
 }
 
@@ -138,6 +145,17 @@ function getNodeOutputEdges(
 
     case 'counit':
     case 'cap': {
+      return [];
+    }
+
+    case 'painter': {
+      if (node.outputs.length > 0) {
+        return findEdgesFromPort(diagram, nodeId, node.outputs[0].id);
+      }
+      return [];
+    }
+
+    case 'filter': {
       return [];
     }
 
@@ -267,6 +285,36 @@ function processNodeArrival(
       };
     }
 
+    case 'painter': {
+      const config = node.config as PainterConfig | undefined;
+      const outputColor = config?.targetColor ?? bead.kind;
+      return {
+        outputBeads: outputEdges.map(e => ({ edgeId: e.id, kind: outputColor })),
+        feedbackBeads: [],
+        consumed: true,
+      };
+    }
+
+    case 'filter': {
+      const config = node.config as FilterConfig | undefined;
+      const matchColor = config?.matchColor ?? 'signal';
+      const isMatch = bead.kind === matchColor;
+      const outputIndex = isMatch ? 0 : 1;
+      if (node.outputs[outputIndex]) {
+        const edges = findEdgesFromPort(diagram, node.id, node.outputs[outputIndex].id);
+        return {
+          outputBeads: edges.map(e => ({ edgeId: e.id, kind: bead.kind })),
+          feedbackBeads: [],
+          consumed: true,
+        };
+      }
+      return {
+        outputBeads: [],
+        feedbackBeads: [],
+        consumed: true,
+      };
+    }
+
     default:
       return { outputBeads: [], feedbackBeads: [], consumed: true };
   }
@@ -317,6 +365,7 @@ export function stepSimulation(
   let newBeads: Bead[] = [];
   const beadsToRemove = new Set<string>();
   const pendingNewBeads: Bead[] = [];
+  const newCollectedBeads = new Map(state.collectedBeads);
 
   for (const bead of state.beads) {
     if (bead.state === 'processed') {
@@ -340,6 +389,12 @@ export function stepSimulation(
 
           if (result.consumed) {
             beadsToRemove.add(bead.id);
+
+            if (endInfo.node.type === 'counit') {
+              const portId = endInfo.portId;
+              const existing = newCollectedBeads.get(portId) ?? [];
+              newCollectedBeads.set(portId, [...existing, bead.kind]);
+            }
 
             if (endInfo.node.type === 'merge') {
               const mergeWaitingBeads = state.beads.filter(b =>
@@ -419,6 +474,7 @@ export function stepSimulation(
     ...state,
     beads: newBeads,
     time: state.time + dt,
+    collectedBeads: newCollectedBeads,
   };
 }
 
@@ -431,5 +487,5 @@ export function setSpeed(state: SimulationState, speed: number): SimulationState
 }
 
 export function clearBeads(state: SimulationState): SimulationState {
-  return { ...state, beads: [], time: 0 };
+  return { ...state, beads: [], time: 0, collectedBeads: new Map() };
 }

@@ -7,7 +7,7 @@ interface BuildPaletteProps {
   onNodeAdd: (type: NodeType) => void;
 }
 
-const PALETTE_ITEMS: Array<{ type: NodeType; category: 'basic' | 'control' | 'compact' }> = [
+const PALETTE_ITEMS: Array<{ type: NodeType; category: 'basic' | 'control' | 'compact' | 'transform' }> = [
   { type: 'identity', category: 'basic' },
   { type: 'delay', category: 'basic' },
   { type: 'swap', category: 'basic' },
@@ -19,6 +19,8 @@ const PALETTE_ITEMS: Array<{ type: NodeType; category: 'basic' | 'control' | 'co
   { type: 'counit', category: 'compact' },
   { type: 'cup', category: 'compact' },
   { type: 'cap', category: 'compact' },
+  { type: 'painter', category: 'transform' },
+  { type: 'filter', category: 'transform' },
 ];
 
 const NODE_ICONS: Record<NodeType, React.ReactNode> = {
@@ -88,6 +90,20 @@ const NODE_ICONS: Record<NodeType, React.ReactNode> = {
       <path d="M6,18 Q6,6 12,6 Q18,6 18,18" fill="none" stroke="#ec4899" strokeWidth="2" />
     </svg>
   ),
+  'painter': (
+    <svg viewBox="0 0 24 24" className="w-6 h-6">
+      <circle cx="12" cy="12" r="6" fill="#3b82f6" />
+      <circle cx="12" cy="12" r="6" fill="none" stroke="white" strokeWidth="1" />
+      <polygon points="12,7 14,14 10,14" fill="white" />
+    </svg>
+  ),
+  'filter': (
+    <svg viewBox="0 0 24 24" className="w-6 h-6">
+      <polygon points="12,4 20,12 12,20 4,12" fill="#22c55e" />
+      <polygon points="12,4 20,12 12,20 4,12" fill="none" stroke="white" strokeWidth="1" />
+      <text x="12" y="14" textAnchor="middle" fill="white" fontSize="8" fontWeight="bold">?</text>
+    </svg>
+  ),
 };
 
 export function BuildPalette({ onDragStart, onNodeAdd }: BuildPaletteProps) {
@@ -95,6 +111,7 @@ export function BuildPalette({ onDragStart, onNodeAdd }: BuildPaletteProps) {
     { key: 'basic', label: 'Basic' },
     { key: 'control', label: 'Control Flow' },
     { key: 'compact', label: 'Compact Closed' },
+    { key: 'transform', label: 'Transform' },
   ] as const;
 
   return (

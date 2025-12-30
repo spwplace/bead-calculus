@@ -1,16 +1,184 @@
-import type { Diagram, NodeType } from '../core/diagram';
+import type { Diagram, NodeType, BeadKind } from '../core/diagram';
 import { createNode, createEdge, createDiagram, createPort, createTracePair, resetIdCounter } from '../core/diagram';
 import type { RewriteRuleName } from '../core/rewrite';
+import type { WinCondition } from '../core/winCondition';
+
+export interface InputBeadSpec {
+  edgeIndex: number;
+  color: BeadKind;
+  delay?: number;
+}
 
 export interface Level {
   id: string;
   name: string;
   description: string;
-  mode: 'build' | 'rewrite';
+  mode: 'build' | 'rewrite' | 'play';
   initial: Diagram;
   target?: Diagram;
   availableMoves: RewriteRuleName[];
   palette?: NodeType[];
+  inputBeads?: InputBeadSpec[];
+  winCondition?: WinCondition;
+}
+
+export function createLevel0_1_FirstDrop(): Level {
+  resetIdCounter();
+
+  const input = createNode('unit', { x: 100, y: 150 });
+  const wire = createNode('identity', { x: 200, y: 150 });
+  const output = createNode('counit', { x: 300, y: 150 });
+
+  const edges = [
+    createEdge(input.id, input.outputs[0].id, wire.id, wire.inputs[0].id),
+    createEdge(wire.id, wire.outputs[0].id, output.id, output.inputs[0].id),
+  ];
+
+  const initial = createDiagram(
+    [input, wire, output],
+    edges,
+    [],
+    [],
+    []
+  );
+
+  return {
+    id: 'bead-0-1',
+    name: 'First Drop',
+    description: 'Drop a red bead and watch it travel to the output. Press Play, then click "Drop Bead" to start!',
+    mode: 'play',
+    initial,
+    availableMoves: [],
+    inputBeads: [{ edgeIndex: 0, color: 'red' }],
+    winCondition: {
+      type: 'exact-sequence',
+      outputs: [{ portId: output.inputs[0].id, expected: ['red'] }],
+    },
+  };
+}
+
+export function createLevel0_2_PaintItBlue(): Level {
+  resetIdCounter();
+
+  const input = createNode('unit', { x: 80, y: 150 });
+  const painter = createNode('painter', { x: 180, y: 150 }, undefined, { targetColor: 'blue' });
+  const output = createNode('counit', { x: 300, y: 150 });
+
+  const edges = [
+    createEdge(input.id, input.outputs[0].id, painter.id, painter.inputs[0].id),
+    createEdge(painter.id, painter.outputs[0].id, output.id, output.inputs[0].id),
+  ];
+
+  const initial = createDiagram(
+    [input, painter, output],
+    edges,
+    [],
+    [],
+    []
+  );
+
+  return {
+    id: 'bead-0-2',
+    name: 'Paint It Blue',
+    description: 'The Painter gate transforms any bead to its target color. Drop a red bead and watch it become blue!',
+    mode: 'play',
+    initial,
+    availableMoves: [],
+    inputBeads: [{ edgeIndex: 0, color: 'red' }],
+    winCondition: {
+      type: 'exact-sequence',
+      outputs: [{ portId: output.inputs[0].id, expected: ['blue'] }],
+    },
+  };
+}
+
+export function createLevel0_3_TheSorter(): Level {
+  resetIdCounter();
+
+  const input = createNode('unit', { x: 50, y: 150 });
+  const filter = createNode('filter', { x: 150, y: 150 }, undefined, { matchColor: 'red' });
+  const outputA = createNode('counit', { x: 280, y: 100 });
+  const outputB = createNode('counit', { x: 280, y: 200 });
+
+  const edges = [
+    createEdge(input.id, input.outputs[0].id, filter.id, filter.inputs[0].id),
+    createEdge(filter.id, filter.outputs[0].id, outputA.id, outputA.inputs[0].id),
+    createEdge(filter.id, filter.outputs[1].id, outputB.id, outputB.inputs[0].id),
+  ];
+
+  const initial = createDiagram(
+    [input, filter, outputA, outputB],
+    edges,
+    [],
+    [],
+    []
+  );
+
+  return {
+    id: 'bead-0-3',
+    name: 'The Sorter',
+    description: 'The Filter gate sorts beads by color. Red beads go to output A (top), everything else goes to output B (bottom).',
+    mode: 'play',
+    initial,
+    availableMoves: [],
+    inputBeads: [
+      { edgeIndex: 0, color: 'red', delay: 0 },
+      { edgeIndex: 0, color: 'blue', delay: 800 },
+      { edgeIndex: 0, color: 'red', delay: 1600 },
+    ],
+    winCondition: {
+      type: 'exact-sequence',
+      outputs: [
+        { portId: outputA.inputs[0].id, expected: ['red', 'red'] },
+        { portId: outputB.inputs[0].id, expected: ['blue'] },
+      ],
+    },
+  };
+}
+
+export function createLevel0_4_ColorSwap(): Level {
+  resetIdCounter();
+
+  const inputA = createNode('unit', { x: 50, y: 100 });
+  const inputB = createNode('unit', { x: 50, y: 200 });
+  const swap = createNode('swap', { x: 170, y: 130 });
+  const outputA = createNode('counit', { x: 300, y: 100 });
+  const outputB = createNode('counit', { x: 300, y: 200 });
+
+  const edges = [
+    createEdge(inputA.id, inputA.outputs[0].id, swap.id, swap.inputs[0].id),
+    createEdge(inputB.id, inputB.outputs[0].id, swap.id, swap.inputs[1].id),
+    createEdge(swap.id, swap.outputs[0].id, outputA.id, outputA.inputs[0].id),
+    createEdge(swap.id, swap.outputs[1].id, outputB.id, outputB.inputs[0].id),
+  ];
+
+  const initial = createDiagram(
+    [inputA, inputB, swap, outputA, outputB],
+    edges,
+    [],
+    [],
+    []
+  );
+
+  return {
+    id: 'bead-0-4',
+    name: 'Color Swap',
+    description: 'The Swap gate crosses two paths. Red from top ends at bottom, blue from bottom ends at top!',
+    mode: 'play',
+    initial,
+    availableMoves: [],
+    inputBeads: [
+      { edgeIndex: 0, color: 'red', delay: 0 },
+      { edgeIndex: 1, color: 'blue', delay: 0 },
+    ],
+    winCondition: {
+      type: 'exact-sequence',
+      outputs: [
+        { portId: outputA.inputs[0].id, expected: ['blue'] },
+        { portId: outputB.inputs[0].id, expected: ['red'] },
+      ],
+    },
+  };
 }
 
 export function createLevel1_Slide(): Level {
@@ -330,6 +498,10 @@ export function createLevel9_CompactClosed(): Level {
 }
 
 export const TUTORIAL_LEVELS: Level[] = [
+  createLevel0_1_FirstDrop(),
+  createLevel0_2_PaintItBlue(),
+  createLevel0_3_TheSorter(),
+  createLevel0_4_ColorSwap(),
   createLevel1_Slide(),
   createLevel2_Straighten(),
   createLevel3_Thread(),
