@@ -10,9 +10,74 @@ import type { RewriteMatch } from './core/rewrite';
 import { applyRewrite, findAllRewriteMatches } from './core/rewrite';
 import { countBeadsByKind, countActiveBeads } from './core/invariant';
 import { TUTORIAL_LEVELS, type Level } from './levels/tutorial';
-import type { NodeType } from './core/diagram';
+import type { NodeType, BeadKind } from './core/diagram';
 import { createDiagram, BEAD_COLORS } from './core/diagram';
 import { soundEngine, initSoundOnInteraction, triggerHaptic } from './core/sound';
+import type { WinCondition } from './core/winCondition';
+
+function GoalHUD({ 
+  winCondition, 
+  collectedBeads,
+  hasWon 
+}: { 
+  winCondition: WinCondition; 
+  collectedBeads: Map<string, BeadKind[]>;
+  hasWon: boolean;
+}) {
+  if (winCondition.type !== 'exact-sequence' || !winCondition.outputs) {
+    return null;
+  }
+
+  const allExpected: BeadKind[] = [];
+  const allCollected: BeadKind[] = [];
+  
+  for (const output of winCondition.outputs) {
+    allExpected.push(...output.expected);
+    const collected = collectedBeads.get(output.portId) ?? [];
+    allCollected.push(...collected);
+  }
+
+  return (
+    <div className={`absolute top-4 right-4 bg-[#1a1a2e]/95 px-4 py-3 rounded-xl border transition-all ${
+      hasWon ? 'border-[#22c55e] shadow-lg shadow-[#22c55e]/20' : 'border-[#2a2a4e]'
+    }`}>
+      <div className="text-xs text-[#94a3b8] mb-2 font-medium">
+        {hasWon ? '✓ Goal Complete!' : 'Goal: Collect'}
+      </div>
+      <div className="flex gap-1.5 items-center">
+        {allExpected.map((kind, idx) => {
+          const isCollected = idx < allCollected.length && allCollected[idx] === kind;
+          return (
+            <div 
+              key={idx} 
+              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                isCollected 
+                  ? 'border-[#22c55e] scale-110' 
+                  : 'border-[#3a3a5e]'
+              }`}
+              style={{ 
+                backgroundColor: isCollected ? BEAD_COLORS[kind] : 'transparent',
+                boxShadow: isCollected ? `0 0 8px ${BEAD_COLORS[kind]}` : 'none'
+              }}
+            >
+              {!isCollected && (
+                <div 
+                  className="w-3 h-3 rounded-full opacity-40"
+                  style={{ backgroundColor: BEAD_COLORS[kind] }}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {!hasWon && allCollected.length > 0 && (
+        <div className="text-xs text-[#64748b] mt-2">
+          {allCollected.length}/{allExpected.length} collected
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function App() {
   const {
@@ -121,6 +186,10 @@ export default function App() {
   }, [diagram, setDiagram]);
 
   const handleInjectBead = useCallback(() => {
+    if (paused) {
+      togglePause();
+    }
+    
     if (currentLevel?.inputBeads && currentLevel.inputBeads.length > 0) {
       for (const inputBead of currentLevel.inputBeads) {
         const edgeId = diagram.edges[inputBead.edgeIndex]?.id;
@@ -142,7 +211,7 @@ export default function App() {
       soundEngine.playBeadDrop();
       triggerHaptic('light');
     }
-  }, [diagram.edges, injectBead, currentLevel]);
+  }, [diagram.edges, injectBead, currentLevel, paused, togglePause]);
 
   const handleSelectLevel = useCallback((level: Level) => {
     loadLevel(level.initial, level.target, level.mode, level.winCondition);
@@ -232,7 +301,15 @@ export default function App() {
 
         <BeadCounter counts={beadCounts} total={beadCount} />
 
-        {collectedBeadsCounts.size > 0 && (
+        {currentLevel?.winCondition && mode === 'play' && (
+          <GoalHUD 
+            winCondition={currentLevel.winCondition} 
+            collectedBeads={getCollectedBeads()}
+            hasWon={hasWon}
+          />
+        )}
+
+        {collectedBeadsCounts.size > 0 && mode !== 'play' && (
           <div className="absolute top-4 right-4 bg-[#1a1a2e]/90 px-3 py-2 rounded-lg border border-[#2a2a4e]">
             <div className="text-xs text-[#94a3b8] mb-1">Collected</div>
             <div className="flex gap-2">
@@ -250,9 +327,43 @@ export default function App() {
         )}
 
         {(showQED || showWin) && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60 animate-fade-in">
-            <div className="text-6xl font-bold text-[#22c55e] animate-bounce">
-              {showWin ? 'WIN!' : 'QED'}
+          <div className="absolute inset-0 flex items-center justify-center bg-black/70 animate-fade-in">
+            <div className="flex flex-col items-center gap-6">
+              <div className="text-7xl font-black text-[#22c55e] animate-bounce-in drop-shadow-[0_0_30px_rgba(34,197,94,0.5)]">
+                {showWin ? '✨ WIN! ✨' : '∎ QED'}
+              </div>
+              {showWin && currentLevel && (
+                <p className="text-[#94a3b8] text-lg">{currentLevel.name} complete!</p>
+              )}
+              <div className="flex gap-3 mt-2">
+                {showWin && (
+                  <button
+                    onClick={() => {
+                      const currentIdx = TUTORIAL_LEVELS.findIndex(l => l.id === currentLevel?.id);
+                      const nextLevel = TUTORIAL_LEVELS[currentIdx + 1];
+                      if (nextLevel) {
+                        handleSelectLevel(nextLevel);
+                      }
+                      setShowWin(false);
+                    }}
+                    className="px-6 py-3 bg-[#22c55e] hover:bg-[#16a34a] text-black font-bold rounded-lg transition-colors"
+                  >
+                    Next Level →
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    if (currentLevel) {
+                      loadLevel(currentLevel.initial, currentLevel.target, currentLevel.mode, currentLevel.winCondition);
+                    }
+                    setShowQED(false);
+                    setShowWin(false);
+                  }}
+                  className="px-6 py-3 bg-[#3a3a5e] hover:bg-[#4a4a6e] text-white rounded-lg transition-colors"
+                >
+                  Replay
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -265,6 +376,7 @@ export default function App() {
         availableRewrites={availableRewrites}
         canUndo={canUndo()}
         canRedo={canRedo()}
+        mode={mode}
         onTogglePlayPause={togglePause}
         onInjectBead={handleInjectBead}
         onClearBeads={clearBeads}

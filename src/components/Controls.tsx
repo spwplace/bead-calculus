@@ -1,5 +1,7 @@
 import type { RewriteMatch } from '../core/rewrite';
 
+type GameMode = 'play' | 'rewrite' | 'build' | 'sandbox';
+
 interface ControlsProps {
   isPaused: boolean;
   speed: number;
@@ -7,6 +9,7 @@ interface ControlsProps {
   availableRewrites: RewriteMatch[];
   canUndo: boolean;
   canRedo: boolean;
+  mode: GameMode;
   onTogglePlayPause: () => void;
   onInjectBead: () => void;
   onClearBeads: () => void;
@@ -24,6 +27,7 @@ export function Controls({
   availableRewrites,
   canUndo,
   canRedo,
+  mode,
   onTogglePlayPause,
   onInjectBead,
   onClearBeads,
@@ -33,6 +37,7 @@ export function Controls({
   onRedo,
   onRewriteHover,
 }: ControlsProps) {
+  const isPlayMode = mode === 'play';
   return (
     <div className="bg-[#1a1a2e] border-t border-[#2a2a4e] px-4 py-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -54,9 +59,13 @@ export function Controls({
 
           <button
             onClick={onInjectBead}
-            className="px-4 h-10 bg-[#f59e0b] hover:bg-[#d97706] text-black font-medium rounded-lg transition-colors touch-target"
+            className={`font-bold rounded-lg transition-all touch-target ${
+              isPlayMode
+                ? 'px-6 h-14 text-lg bg-[#f59e0b] hover:bg-[#d97706] text-black shadow-lg shadow-[#f59e0b]/30 hover:shadow-[#f59e0b]/50 hover:scale-105 animate-pulse-subtle'
+                : 'px-4 h-10 bg-[#f59e0b] hover:bg-[#d97706] text-black'
+            }`}
           >
-            Drop Bead
+            {isPlayMode ? '🔵 Drop Bead' : 'Drop Bead'}
           </button>
 
           <button
