@@ -434,19 +434,22 @@ export function createLevel7_SwapInvolution(): Level {
 export function createLevel8_Snake(): Level {
   resetIdCounter();
 
-  const cup = createNode('cup', { x: 150, y: 120 });
-  const cap = createNode('cap', { x: 250, y: 120 });
+  const idIn = createNode('identity', { x: 80, y: 100 });
+  const cup = createNode('cup', { x: 180, y: 150 });
+  const cap = createNode('cap', { x: 280, y: 100 });
+  const idOut = createNode('identity', { x: 380, y: 150 });
 
   const edges = [
+    createEdge(idIn.id, idIn.outputs[0].id, cap.id, cap.inputs[0].id),
     createEdge(cup.id, cup.outputs[0].id, cap.id, cap.inputs[1].id),
-    createEdge(cup.id, cup.outputs[1].id, cap.id, cap.inputs[0].id),
+    createEdge(cup.id, cup.outputs[1].id, idOut.id, idOut.inputs[0].id),
   ];
 
   const initial = createDiagram(
-    [cup, cap],
+    [idIn, cup, cap, idOut],
     edges,
-    [],
-    [],
+    [createPort('signal', 'input')],
+    [createPort('signal', 'output')],
     [],
     []
   );
@@ -454,7 +457,7 @@ export function createLevel8_Snake(): Level {
   return {
     id: 'tutorial-8',
     name: 'Snake Equation',
-    description: 'The snake equation: ε ∘ (id ⊗ η) = id. A cup feeding crossed into a cap cancels completely - yank the snake straight!',
+    description: 'The snake equation: (id ⊗ η) ; (ε ⊗ id) = id. The zigzag path through cup and cap is secretly just a straight wire - yank it!',
     mode: 'rewrite',
     initial,
     availableMoves: ['snake'],
@@ -464,22 +467,25 @@ export function createLevel8_Snake(): Level {
 export function createLevel9_CompactClosed(): Level {
   resetIdCounter();
 
-  const id1 = createNode('identity', { x: 50, y: 150 });
-  const cup = createNode('cup', { x: 150, y: 100 });
-  const swap = createNode('swap', { x: 250, y: 130 });
-  const cap = createNode('cap', { x: 350, y: 100 });
-  const id2 = createNode('identity', { x: 450, y: 150 });
+  const id1 = createNode('identity', { x: 50, y: 130 });
+  const cup = createNode('cup', { x: 120, y: 200 });
+  const swap1 = createNode('swap', { x: 220, y: 130 });
+  const swap2 = createNode('swap', { x: 320, y: 130 });
+  const cap = createNode('cap', { x: 420, y: 80 });
+  const id2 = createNode('identity', { x: 490, y: 180 });
 
   const edges = [
-    createEdge(id1.id, id1.outputs[0].id, swap.id, swap.inputs[0].id),
-    createEdge(cup.id, cup.outputs[0].id, swap.id, swap.inputs[1].id),
-    createEdge(swap.id, swap.outputs[0].id, cap.id, cap.inputs[0].id),
+    createEdge(id1.id, id1.outputs[0].id, swap1.id, swap1.inputs[0].id),
+    createEdge(cup.id, cup.outputs[0].id, swap1.id, swap1.inputs[1].id),
+    createEdge(swap1.id, swap1.outputs[0].id, swap2.id, swap2.inputs[0].id),
+    createEdge(swap1.id, swap1.outputs[1].id, swap2.id, swap2.inputs[1].id),
+    createEdge(swap2.id, swap2.outputs[0].id, cap.id, cap.inputs[0].id),
+    createEdge(swap2.id, swap2.outputs[1].id, id2.id, id2.inputs[0].id),
     createEdge(cup.id, cup.outputs[1].id, cap.id, cap.inputs[1].id),
-    createEdge(swap.id, swap.outputs[1].id, id2.id, id2.inputs[0].id),
   ];
 
   const initial = createDiagram(
-    [id1, cup, swap, cap, id2],
+    [id1, cup, swap1, swap2, cap, id2],
     edges,
     [createPort('signal', 'input')],
     [createPort('signal', 'output')],
@@ -490,10 +496,10 @@ export function createLevel9_CompactClosed(): Level {
   return {
     id: 'tutorial-9',
     name: 'Compact Closed',
-    description: 'Combine swap involution and snake equation to simplify this tangled diagram. The cup and cap with a swap in between is secretly just a wire!',
+    description: 'Two swaps cancel (σ∘σ=id), revealing a zigzag that also cancels (snake equation). Unravel this tangle to find a simple wire!',
     mode: 'rewrite',
     initial,
-    availableMoves: ['snake', 'swap-involution', 'slide'],
+    availableMoves: ['snake', 'swap-involution'],
   };
 }
 

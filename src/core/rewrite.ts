@@ -83,29 +83,70 @@ export function findStraightenMatches(diagram: Diagram): RewriteMatch[] {
   const matches: RewriteMatch[] = [];
 
   for (const tracePair of diagram.tracePairs) {
-    if (isEmptyTrace(diagram, tracePair)) {
-      matches.push({
-        rule: 'straighten',
-        nodeIds: [tracePair.traceInNodeId, tracePair.traceOutNodeId],
-        description: 'Remove empty trace loop (yanking)',
-      });
-    }
+    if (!isEmptyTrace(diagram, tracePair)) continue;
+    
+    const traceIn = findNode(diagram, tracePair.traceInNodeId);
+    const traceOut = findNode(diagram, tracePair.traceOutNodeId);
+    if (!traceIn || !traceOut) continue;
+    
+    const incomingToTraceIn = findEdgeToNode(diagram, traceIn.id, traceIn.inputs[0]?.id);
+    const outgoingFromTraceOut = findEdgeFromNode(diagram, traceOut.id, traceOut.outputs[0]?.id);
+    
+    if (!incomingToTraceIn || !outgoingFromTraceOut) continue;
+    
+    matches.push({
+      rule: 'straighten',
+      nodeIds: [tracePair.traceInNodeId, tracePair.traceOutNodeId],
+      description: `Yank empty loop: Tr(id) = id. Connects ${incomingToTraceIn.from.nodeId} → ${outgoingFromTraceOut.to.nodeId}`,
+    });
   }
 
   return matches;
 }
 
+/**
+ * Check if a trace pair represents an "empty trace" (Tr(id) pattern).
+ * 
+ * An empty trace means:
+ * 1. trace-in.outputs[0] connects DIRECTLY to trace-out.inputs[0]
+ * 2. That's the ONLY edge from trace-in's output
+ * 3. That's the ONLY edge to trace-out's input
+ * 4. External connections exist (incoming to trace-in, outgoing from trace-out)
+ */
 function isEmptyTrace(diagram: Diagram, tracePair: TracePair): boolean {
   const traceIn = findNode(diagram, tracePair.traceInNodeId);
   const traceOut = findNode(diagram, tracePair.traceOutNodeId);
   
   if (!traceIn || !traceOut) return false;
+  if (traceIn.type !== 'trace-in' || traceOut.type !== 'trace-out') return false;
+  if (traceIn.outputs.length !== 1 || traceOut.inputs.length !== 1) return false;
   
-  const directEdge = diagram.edges.find(
-    e => e.from.nodeId === traceIn.id && e.to.nodeId === traceOut.id
+  const loopOutPort = traceIn.outputs[0].id;
+  const loopInPort = traceOut.inputs[0].id;
+  
+  // Find edges leaving trace-in's output
+  const edgesFromTraceIn = diagram.edges.filter(
+    e => e.from.nodeId === traceIn.id && e.from.portId === loopOutPort
   );
   
-  return directEdge !== null;
+  // Must be exactly one edge from trace-in output
+  if (edgesFromTraceIn.length !== 1) return false;
+  
+  const directEdge = edgesFromTraceIn[0];
+  
+  // That edge must go directly to trace-out's input
+  if (directEdge.to.nodeId !== traceOut.id || directEdge.to.portId !== loopInPort) {
+    return false;
+  }
+  
+  // Find edges entering trace-out's input - must be exactly one (the direct edge)
+  const edgesToTraceOut = diagram.edges.filter(
+    e => e.to.nodeId === traceOut.id && e.to.portId === loopInPort
+  );
+  
+  if (edgesToTraceOut.length !== 1) return false;
+  
+  return true;
 }
 
 function findEdgeToNode(diagram: Diagram, nodeId: string, portId: string): Edge | undefined {
@@ -141,23 +182,23 @@ export function applyStraighten(diagram: Diagram, match: RewriteMatch): RewriteR
   const incomingToTraceIn = findEdgeToNode(diagram, traceInId, traceIn.inputs[0]?.id);
   const outgoingFromTraceOut = findEdgeFromNode(diagram, traceOutId, traceOut.outputs[0]?.id);
 
-  let newEdges = diagram.edges.filter(
-    e =>
+  if (!incomingToTraceIn || !outgoingFromTraceOut) {
+    return { success: false, diagram, message: 'Cannot straighten: missing external connections' };
+  }
+
+  const newEdges = diagram.edges
+    .filter(e =>
       e.from.nodeId !== traceInId &&
       e.from.nodeId !== traceOutId &&
       e.to.nodeId !== traceInId &&
       e.to.nodeId !== traceOutId
-  );
-
-  if (incomingToTraceIn && outgoingFromTraceOut) {
-    const bypassEdge = createEdge(
+    )
+    .concat([createEdge(
       incomingToTraceIn.from.nodeId,
       incomingToTraceIn.from.portId,
       outgoingFromTraceOut.to.nodeId,
       outgoingFromTraceOut.to.portId
-    );
-    newEdges = [...newEdges, bypassEdge];
-  }
+    )]);
 
   const newNodes = diagram.nodes.filter(
     n => n.id !== traceInId && n.id !== traceOutId
@@ -173,7 +214,7 @@ export function applyStraighten(diagram: Diagram, match: RewriteMatch): RewriteR
       edges: newEdges,
       tracePairs: newTracePairs,
     },
-    message: 'Straightened empty trace (yanking law: Tr(id) = id)',
+    message: 'Yanked empty trace: Tr(id) = id',
   };
 }
 
@@ -475,56 +516,86 @@ export function applySuperpose(diagram: Diagram, match: RewriteMatch): RewriteRe
   }
 }
 
-/**
- * Snake Equation: ε ∘ (id ⊗ η) = id
- * Cup-cap pair where cup.out[0]→cap.in[1] and cup.out[1]→cap.in[0] cancels to identity
- */
-export function findSnakeMatches(diagram: Diagram): RewriteMatch[] {
-  const matches: RewriteMatch[] = [];
+interface SnakeMatchData {
+  cup: Node;
+  cap: Node;
+  internalEdge: Edge;
+  incomingEdge: Edge;
+  outgoingEdge: Edge;
+  cupOutputIndex: number;
+  capInputIndex: number;
+}
 
-  for (const cupCapPair of diagram.cupCapPairs) {
-    const cup = findNode(diagram, cupCapPair.cupNodeId);
-    const cap = findNode(diagram, cupCapPair.capNodeId);
-    if (!cup || !cap) continue;
+function findZigzagPattern(diagram: Diagram, cup: Node, cap: Node): SnakeMatchData | null {
+  if (cup.type !== 'cup' || cap.type !== 'cap') return null;
+  if (cup.outputs.length !== 2 || cap.inputs.length !== 2) return null;
 
-    const cupOut0ToCap = diagram.edges.find(
-      e => e.from.nodeId === cup.id && e.from.portId === cup.outputs[0]?.id &&
-           e.to.nodeId === cap.id && e.to.portId === cap.inputs[1]?.id
-    );
-    const cupOut1ToCap = diagram.edges.find(
-      e => e.from.nodeId === cup.id && e.from.portId === cup.outputs[1]?.id &&
-           e.to.nodeId === cap.id && e.to.portId === cap.inputs[0]?.id
-    );
+  for (let i = 0; i < 2; i++) {
+    for (let j = 0; j < 2; j++) {
+      const cupOutPort = cup.outputs[i].id;
+      const capInPort = cap.inputs[j].id;
+      const otherCupOutPort = cup.outputs[1 - i].id;
+      const otherCapInPort = cap.inputs[1 - j].id;
 
-    if (cupOut0ToCap && cupOut1ToCap) {
-      matches.push({
-        rule: 'snake',
-        nodeIds: [cup.id, cap.id],
-        description: 'Snake equation: cup-cap pair cancels to identity (ε ∘ (id ⊗ η) = id)',
-      });
+      const internalEdge = diagram.edges.find(
+        e => e.from.nodeId === cup.id && e.from.portId === cupOutPort &&
+             e.to.nodeId === cap.id && e.to.portId === capInPort
+      );
+      if (!internalEdge) continue;
+
+      const edgesFromCupOut = diagram.edges.filter(
+        e => e.from.nodeId === cup.id && e.from.portId === cupOutPort
+      );
+      if (edgesFromCupOut.length !== 1) continue;
+
+      const edgesToCapIn = diagram.edges.filter(
+        e => e.to.nodeId === cap.id && e.to.portId === capInPort
+      );
+      if (edgesToCapIn.length !== 1) continue;
+
+      const incomingEdge = diagram.edges.find(
+        e => e.to.nodeId === cap.id && e.to.portId === otherCapInPort &&
+             e.from.nodeId !== cup.id
+      );
+      if (!incomingEdge) continue;
+
+      const outgoingEdge = diagram.edges.find(
+        e => e.from.nodeId === cup.id && e.from.portId === otherCupOutPort &&
+             e.to.nodeId !== cap.id
+      );
+      if (!outgoingEdge) continue;
+
+      return {
+        cup,
+        cap,
+        internalEdge,
+        incomingEdge,
+        outgoingEdge,
+        cupOutputIndex: i,
+        capInputIndex: j,
+      };
     }
   }
 
+  return null;
+}
+
+export function findSnakeMatches(diagram: Diagram): RewriteMatch[] {
+  const matches: RewriteMatch[] = [];
+  const seenPairs = new Set<string>();
+
   for (const cup of diagram.nodes.filter(n => n.type === 'cup')) {
     for (const cap of diagram.nodes.filter(n => n.type === 'cap')) {
-      if (diagram.cupCapPairs.some(cc => cc.cupNodeId === cup.id && cc.capNodeId === cap.id)) {
-        continue;
-      }
+      const pairKey = `${cup.id}:${cap.id}`;
+      if (seenPairs.has(pairKey)) continue;
 
-      const cupOut0ToCap = diagram.edges.find(
-        e => e.from.nodeId === cup.id && e.from.portId === cup.outputs[0]?.id &&
-             e.to.nodeId === cap.id && e.to.portId === cap.inputs[1]?.id
-      );
-      const cupOut1ToCap = diagram.edges.find(
-        e => e.from.nodeId === cup.id && e.from.portId === cup.outputs[1]?.id &&
-             e.to.nodeId === cap.id && e.to.portId === cap.inputs[0]?.id
-      );
-
-      if (cupOut0ToCap && cupOut1ToCap) {
+      const zigzag = findZigzagPattern(diagram, cup, cap);
+      if (zigzag) {
+        seenPairs.add(pairKey);
         matches.push({
           rule: 'snake',
           nodeIds: [cup.id, cap.id],
-          description: 'Snake equation: cup-cap cancellation',
+          description: `Snake equation: zigzag cancels to wire (${zigzag.incomingEdge.from.nodeId} → ${zigzag.outgoingEdge.to.nodeId})`,
         });
       }
     }
@@ -546,11 +617,24 @@ export function applySnake(diagram: Diagram, match: RewriteMatch): RewriteResult
     return { success: false, diagram, message: 'Invalid cup/cap nodes' };
   }
 
+  const zigzag = findZigzagPattern(diagram, cup, cap);
+  if (!zigzag) {
+    return { success: false, diagram, message: 'No valid zigzag pattern found' };
+  }
+
+  const newEdges = diagram.edges
+    .filter(e =>
+      e.from.nodeId !== cupId && e.from.nodeId !== capId &&
+      e.to.nodeId !== cupId && e.to.nodeId !== capId
+    )
+    .concat([createEdge(
+      zigzag.incomingEdge.from.nodeId,
+      zigzag.incomingEdge.from.portId,
+      zigzag.outgoingEdge.to.nodeId,
+      zigzag.outgoingEdge.to.portId
+    )]);
+
   const newNodes = diagram.nodes.filter(n => n.id !== cupId && n.id !== capId);
-  const newEdges = diagram.edges.filter(
-    e => e.from.nodeId !== cupId && e.from.nodeId !== capId &&
-         e.to.nodeId !== cupId && e.to.nodeId !== capId
-  );
   const newCupCapPairs = diagram.cupCapPairs.filter(
     cc => cc.cupNodeId !== cupId && cc.capNodeId !== capId
   );
@@ -563,7 +647,7 @@ export function applySnake(diagram: Diagram, match: RewriteMatch): RewriteResult
       edges: newEdges,
       cupCapPairs: newCupCapPairs,
     },
-    message: 'Applied snake equation: cup-cap cancelled (ε ∘ (id ⊗ η) = id)',
+    message: 'Yanked zigzag: snake equation (id ⊗ η) ; (ε ⊗ id) = id',
   };
 }
 

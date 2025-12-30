@@ -50,6 +50,7 @@ export default function App() {
   const [_draggingNodeType, setDraggingNodeType] = useState<NodeType | null>(null);
   const [showWin, setShowWin] = useState(false);
   const [collectedBeadsCounts, setCollectedBeadsCounts] = useState<Map<string, number>>(new Map());
+  const [hoveredRewriteNodeIds, setHoveredRewriteNodeIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     initSoundOnInteraction();
@@ -162,6 +163,14 @@ export default function App() {
     setDraggingNodeType(type);
   }, []);
 
+  const handleRewriteHover = useCallback((match: RewriteMatch | null) => {
+    if (match) {
+      setHoveredRewriteNodeIds(new Set(match.nodeIds));
+    } else {
+      setHoveredRewriteNodeIds(new Set());
+    }
+  }, []);
+
   const handleNodeAdd = useCallback((type: NodeType) => {
     addNodeAtPosition(type, 200 + Math.random() * 200, 150 + Math.random() * 100);
     soundEngine.playNodePlace();
@@ -211,6 +220,7 @@ export default function App() {
           onNodeSelect={selectNode}
           onNodeMove={moveNode}
           onBackgroundClick={clearSelection}
+          hoveredNodeIds={hoveredRewriteNodeIds}
         />
 
         {mode === 'sandbox' && (
@@ -262,6 +272,7 @@ export default function App() {
         onApplyRewrite={handleApplyRewrite}
         onUndo={undo}
         onRedo={redo}
+        onRewriteHover={handleRewriteHover}
       />
 
       {showLevelSelector && (

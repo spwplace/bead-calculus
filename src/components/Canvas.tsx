@@ -12,6 +12,7 @@ interface CanvasProps {
   onNodeSelect: (nodeId: string, additive?: boolean) => void;
   onNodeMove: (nodeId: string, x: number, y: number) => void;
   onBackgroundClick: () => void;
+  hoveredNodeIds?: Set<string>;
 }
 
 interface BeadTrail {
@@ -29,6 +30,7 @@ export function Canvas({
   onNodeSelect,
   onNodeMove,
   onBackgroundClick,
+  hoveredNodeIds = new Set(),
 }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -107,7 +109,9 @@ export function Canvas({
           a => (a.type === 'node-move' || a.type === 'node-scale') && 
                (a.data as { nodeId?: string }).nodeId === node.id
         );
-        drawNodeWithAnimations(ctx, node, selectedNodeIds.has(node.id), viewMode, nodeAnims);
+        const isSelected = selectedNodeIds.has(node.id);
+        const isHovered = hoveredNodeIds.has(node.id);
+        drawNodeWithAnimations(ctx, node, isSelected, isHovered, viewMode, nodeAnims);
       }
 
       const beads = getBeads();
@@ -129,7 +133,7 @@ export function Canvas({
 
     animationId = requestAnimationFrame(gameLoop);
     return () => cancelAnimationFrame(animationId);
-  }, [diagram, viewMode, selectedNodeIds, canvasSize, viewport, stepSimulation, getBeads]);
+  }, [diagram, viewMode, selectedNodeIds, hoveredNodeIds, canvasSize, viewport, stepSimulation, getBeads]);
 
   const screenToWorld = useCallback((screenX: number, screenY: number) => {
     return {
@@ -269,6 +273,7 @@ function drawNodeWithAnimations(
   ctx: CanvasRenderingContext2D,
   node: Node,
   isSelected: boolean,
+  isHovered: boolean,
   viewMode: 'machine' | 'diagram',
   animations: Animation[]
 ) {
@@ -297,9 +302,9 @@ function drawNodeWithAnimations(
   ctx.translate(-(x + dims.width / 2), -(y + dims.height / 2));
 
   if (viewMode === 'machine') {
-    drawMachineNode(ctx, node, dims, x, y, isSelected);
+    drawMachineNode(ctx, node, dims, x, y, isSelected, isHovered);
   } else {
-    drawDiagramNode(ctx, node, dims, x, y, isSelected);
+    drawDiagramNode(ctx, node, dims, x, y, isSelected, isHovered);
   }
 
   drawPorts(ctx, node, dims, x, y);
@@ -313,16 +318,20 @@ function drawMachineNode(
   dims: { width: number; height: number },
   x: number,
   y: number,
-  isSelected: boolean
+  isSelected: boolean,
+  isHovered: boolean
 ) {
-  if (isSelected) {
+  if (isHovered) {
+    ctx.shadowColor = '#22c55e';
+    ctx.shadowBlur = 20;
+  } else if (isSelected) {
     ctx.shadowColor = '#6366f1';
     ctx.shadowBlur = 15;
   }
 
-  ctx.fillStyle = isSelected ? '#4a4a6e' : '#2a2a4e';
-  ctx.strokeStyle = isSelected ? '#6366f1' : '#3a3a5e';
-  ctx.lineWidth = isSelected ? 3 : 2;
+  ctx.fillStyle = isHovered ? '#2a4a3e' : isSelected ? '#4a4a6e' : '#2a2a4e';
+  ctx.strokeStyle = isHovered ? '#22c55e' : isSelected ? '#6366f1' : '#3a3a5e';
+  ctx.lineWidth = isHovered ? 3 : isSelected ? 3 : 2;
 
   ctx.beginPath();
   ctx.roundRect(x, y, dims.width, dims.height, 8);
@@ -348,16 +357,24 @@ function drawDiagramNode(
   dims: { width: number; height: number },
   x: number,
   y: number,
-  isSelected: boolean
+  isSelected: boolean,
+  isHovered: boolean
 ) {
-  ctx.fillStyle = '#0f0f1a';
-  ctx.strokeStyle = isSelected ? '#6366f1' : '#64748b';
-  ctx.lineWidth = 2;
+  if (isHovered) {
+    ctx.shadowColor = '#22c55e';
+    ctx.shadowBlur = 15;
+  }
+
+  ctx.fillStyle = isHovered ? '#1a2e1a' : '#0f0f1a';
+  ctx.strokeStyle = isHovered ? '#22c55e' : isSelected ? '#6366f1' : '#64748b';
+  ctx.lineWidth = isHovered ? 3 : 2;
 
   ctx.beginPath();
   ctx.rect(x, y, dims.width, dims.height);
   ctx.fill();
   ctx.stroke();
+
+  ctx.shadowBlur = 0;
 
   ctx.fillStyle = '#e2e8f0';
   ctx.font = 'bold 10px monospace';

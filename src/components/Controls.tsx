@@ -14,6 +14,7 @@ interface ControlsProps {
   onApplyRewrite: (match: RewriteMatch) => void;
   onUndo: () => void;
   onRedo: () => void;
+  onRewriteHover?: (match: RewriteMatch | null) => void;
 }
 
 export function Controls({
@@ -30,6 +31,7 @@ export function Controls({
   onApplyRewrite,
   onUndo,
   onRedo,
+  onRewriteHover,
 }: ControlsProps) {
   return (
     <div className="bg-[#1a1a2e] border-t border-[#2a2a4e] px-4 py-3">
@@ -110,6 +112,8 @@ export function Controls({
                 <button
                   key={idx}
                   onClick={() => onApplyRewrite(match)}
+                  onMouseEnter={() => onRewriteHover?.(match)}
+                  onMouseLeave={() => onRewriteHover?.(null)}
                   className="px-3 py-1.5 bg-[#22c55e] hover:bg-[#16a34a] text-black text-sm font-medium rounded-md transition-colors touch-target"
                   title={match.description}
                 >
