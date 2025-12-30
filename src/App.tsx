@@ -1,16 +1,36 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Canvas } from './components/Canvas';
 import { Controls } from './components/Controls';
-import { useDiagramStore } from './hooks/useDiagram';
-import { useSimulation } from './hooks/useSimulation';
+import { useGameStore } from './hooks/useGameStore';
 import type { RewriteMatch } from './core/rewrite';
 import { applyRewrite, findAllRewriteMatches } from './core/rewrite';
 
 export default function App() {
-  const { diagram, setDiagram, selectedNodeIds, selectNode, clearSelection, moveNode } = useDiagramStore();
-  const { state: simState, dispatch: simDispatch } = useSimulation(diagram);
+  const {
+    diagram,
+    setDiagram,
+    selectNode,
+    clearSelection,
+    moveNode,
+    paused,
+    speed,
+    togglePause,
+    setSpeed,
+    injectBead,
+    clearBeads,
+    getBeads,
+  } = useGameStore();
+
   const [viewMode, setViewMode] = useState<'machine' | 'diagram'>('machine');
   const [showQED, setShowQED] = useState(false);
+  const [beadCount, setBeadCount] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBeadCount(getBeads().length);
+    }, 100);
+    return () => clearInterval(interval);
+  }, [getBeads]);
 
   const availableRewrites = findAllRewriteMatches(diagram);
 
@@ -27,21 +47,9 @@ export default function App() {
 
   const handleInjectBead = useCallback(() => {
     if (diagram.edges.length > 0) {
-      simDispatch({ type: 'INJECT_BEAD', edgeId: diagram.edges[0].id, kind: 'signal' });
+      injectBead(diagram.edges[0].id, 'signal');
     }
-  }, [diagram.edges, simDispatch]);
-
-  const togglePlayPause = useCallback(() => {
-    simDispatch({ type: 'TOGGLE_PAUSE' });
-  }, [simDispatch]);
-
-  const handleClearBeads = useCallback(() => {
-    simDispatch({ type: 'CLEAR_BEADS' });
-  }, [simDispatch]);
-
-  const handleSpeedChange = useCallback((speed: number) => {
-    simDispatch({ type: 'SET_SPEED', speed });
-  }, [simDispatch]);
+  }, [diagram.edges, injectBead]);
 
   return (
     <div className="h-full w-full flex flex-col bg-[#0f0f1a]">
@@ -59,10 +67,7 @@ export default function App() {
 
       <main className="flex-1 relative overflow-hidden">
         <Canvas
-          diagram={diagram}
-          beads={simState.beads}
           viewMode={viewMode}
-          selectedNodeIds={selectedNodeIds}
           onNodeSelect={selectNode}
           onNodeMove={moveNode}
           onBackgroundClick={clearSelection}
@@ -78,14 +83,14 @@ export default function App() {
       </main>
 
       <Controls
-        isPaused={simState.paused}
-        speed={simState.speed}
-        beadCount={simState.beads.length}
+        isPaused={paused}
+        speed={speed}
+        beadCount={beadCount}
         availableRewrites={availableRewrites}
-        onTogglePlayPause={togglePlayPause}
+        onTogglePlayPause={togglePause}
         onInjectBead={handleInjectBead}
-        onClearBeads={handleClearBeads}
-        onSpeedChange={handleSpeedChange}
+        onClearBeads={clearBeads}
+        onSpeedChange={setSpeed}
         onApplyRewrite={handleApplyRewrite}
       />
     </div>

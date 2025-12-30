@@ -1,38 +1,42 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
+import { useGesture } from '@use-gesture/react';
 import type { Diagram, Node } from '../core/diagram';
 import { NODE_DIMENSIONS, BEAD_COLORS } from '../core/diagram';
 import type { Bead } from '../core/simulation';
 import { getPortPosition, bezierPoint, getEdgeControlPoints } from '../utils/geometry';
+import { useGameStore } from '../hooks/useGameStore';
 
 interface CanvasProps {
-  diagram: Diagram;
-  beads: Bead[];
   viewMode: 'machine' | 'diagram';
-  selectedNodeIds: Set<string>;
   onNodeSelect: (nodeId: string, additive?: boolean) => void;
   onNodeMove: (nodeId: string, x: number, y: number) => void;
   onBackgroundClick: () => void;
 }
 
 export function Canvas({
-  diagram,
-  beads,
   viewMode,
-  selectedNodeIds,
   onNodeSelect,
   onNodeMove,
   onBackgroundClick,
 }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<{ nodeId: string; offsetX: number; offsetY: number } | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
+  const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 });
+  
+  const diagram = useGameStore((state) => state.diagram);
+  const selectedNodeIds = useGameStore((state) => state.selectedNodeIds);
+  const getBeads = useGameStore((state) => state.getBeads);
+  const stepSimulation = useGameStore((state) => state.stepSimulation);
 
   useEffect(() => {
     const updateSize = () => {
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const rect = canvas.parentElement?.getBoundingClientRect();
-        if (rect) {
+      const container = containerRef.current;
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        const canvas = canvasRef.current;
+        if (canvas) {
           const dpr = window.devicePixelRatio || 1;
           canvas.width = rect.width * dpr;
           canvas.height = rect.height * dpr;
@@ -48,69 +52,73 @@ export function Canvas({
     return () => window.removeEventListener('resize', updateSize);
   }, []);
 
-  const draw = useCallback(() => {
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const dpr = window.devicePixelRatio || 1;
-    ctx.save();
-    ctx.scale(dpr, dpr);
-
-    ctx.fillStyle = '#0f0f1a';
-    ctx.fillRect(0, 0, canvasSize.width, canvasSize.height);
-
-    drawGrid(ctx, canvasSize.width, canvasSize.height);
-
-    for (const edge of diagram.edges) {
-      drawEdge(ctx, diagram, edge.id, viewMode);
-    }
-
-    for (const node of diagram.nodes) {
-      drawNode(ctx, node, selectedNodeIds.has(node.id), viewMode);
-    }
-
-    for (const bead of beads) {
-      drawBead(ctx, diagram, bead);
-    }
-
-    ctx.restore();
-  }, [diagram, beads, viewMode, selectedNodeIds, canvasSize]);
-
-  useEffect(() => {
+    let lastTime = 0;
     let animationId: number;
-    const animate = () => {
-      draw();
-      animationId = requestAnimationFrame(animate);
+
+    const gameLoop = (currentTime: number) => {
+      const deltaTime = lastTime === 0 ? 16 : Math.min(currentTime - lastTime, 50);
+      lastTime = currentTime;
+
+      stepSimulation(deltaTime);
+
+      const dpr = window.devicePixelRatio || 1;
+      ctx.save();
+      ctx.scale(dpr, dpr);
+
+      ctx.fillStyle = '#0f0f1a';
+      ctx.fillRect(0, 0, canvasSize.width, canvasSize.height);
+
+      ctx.save();
+      ctx.translate(viewport.x, viewport.y);
+      ctx.scale(viewport.scale, viewport.scale);
+
+      drawGrid(ctx, canvasSize.width / viewport.scale, canvasSize.height / viewport.scale);
+
+      for (const edge of diagram.edges) {
+        drawEdge(ctx, diagram, edge.id, viewMode);
+      }
+
+      for (const node of diagram.nodes) {
+        drawNode(ctx, node, selectedNodeIds.has(node.id), viewMode);
+      }
+
+      const beads = getBeads();
+      for (const bead of beads) {
+        drawBead(ctx, diagram, bead);
+      }
+
+      ctx.restore();
+      ctx.restore();
+
+      animationId = requestAnimationFrame(gameLoop);
     };
-    animationId = requestAnimationFrame(animate);
+
+    animationId = requestAnimationFrame(gameLoop);
     return () => cancelAnimationFrame(animationId);
-  }, [draw]);
+  }, [diagram, viewMode, selectedNodeIds, canvasSize, viewport, stepSimulation, getBeads]);
 
-  const getEventPosition = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-
-    const rect = canvas.getBoundingClientRect();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-
+  const screenToWorld = useCallback((screenX: number, screenY: number) => {
     return {
-      x: clientX - rect.left,
-      y: clientY - rect.top,
+      x: (screenX - viewport.x) / viewport.scale,
+      y: (screenY - viewport.y) / viewport.scale,
     };
-  }, []);
+  }, [viewport]);
 
-  const findNodeAtPosition = useCallback((x: number, y: number): Node | null => {
+  const findNodeAtPosition = useCallback((worldX: number, worldY: number): Node | null => {
     for (const node of [...diagram.nodes].reverse()) {
       const dims = NODE_DIMENSIONS[node.type];
       if (
-        x >= node.position.x &&
-        x <= node.position.x + dims.width &&
-        y >= node.position.y &&
-        y <= node.position.y + dims.height
+        worldX >= node.position.x &&
+        worldX <= node.position.x + dims.width &&
+        worldY >= node.position.y &&
+        worldY <= node.position.y + dims.height
       ) {
         return node;
       }
@@ -118,47 +126,96 @@ export function Canvas({
     return null;
   }, [diagram.nodes]);
 
-  const handlePointerDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    const pos = getEventPosition(e);
-    const node = findNodeAtPosition(pos.x, pos.y);
+  const bind = useGesture({
+    onDrag: ({ xy: [x, y], first, last, memo, event }) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const screenX = x - rect.left;
+      const screenY = y - rect.top;
+      const world = screenToWorld(screenX, screenY);
 
-    if (node) {
-      setDragging({
-        nodeId: node.id,
-        offsetX: pos.x - node.position.x,
-        offsetY: pos.y - node.position.y,
+      if (first) {
+        const node = findNodeAtPosition(world.x, world.y);
+        if (node) {
+          const newDragging = {
+            nodeId: node.id,
+            offsetX: world.x - node.position.x,
+            offsetY: world.y - node.position.y,
+          };
+          setDragging(newDragging);
+          onNodeSelect(node.id, event?.shiftKey ?? false);
+          return newDragging;
+        } else {
+          onBackgroundClick();
+          return null;
+        }
+      }
+
+      const dragState = memo || dragging;
+      if (dragState) {
+        const newX = Math.max(0, world.x - dragState.offsetX);
+        const newY = Math.max(0, world.y - dragState.offsetY);
+        onNodeMove(dragState.nodeId, newX, newY);
+      }
+
+      if (last) {
+        setDragging(null);
+      }
+
+      return dragState;
+    },
+    onPinch: ({ offset: [scale], origin: [ox, oy] }) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const screenX = ox - rect.left;
+      const screenY = oy - rect.top;
+      
+      const newScale = Math.min(Math.max(0.25, scale), 4);
+      const scaleChange = newScale / viewport.scale;
+      
+      setViewport({
+        scale: newScale,
+        x: screenX - (screenX - viewport.x) * scaleChange,
+        y: screenY - (screenY - viewport.y) * scaleChange,
       });
-      onNodeSelect(node.id, 'shiftKey' in e && e.shiftKey);
-    } else {
-      onBackgroundClick();
-    }
-  }, [getEventPosition, findNodeAtPosition, onNodeSelect, onBackgroundClick]);
-
-  const handlePointerMove = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    if (!dragging) return;
-
-    const pos = getEventPosition(e);
-    const newX = Math.max(0, pos.x - dragging.offsetX);
-    const newY = Math.max(0, pos.y - dragging.offsetY);
-    onNodeMove(dragging.nodeId, newX, newY);
-  }, [dragging, getEventPosition, onNodeMove]);
-
-  const handlePointerUp = useCallback(() => {
-    setDragging(null);
-  }, []);
+    },
+    onWheel: ({ delta: [, dy], event }) => {
+      event.preventDefault();
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const screenX = event.clientX - rect.left;
+      const screenY = event.clientY - rect.top;
+      
+      const zoomFactor = dy > 0 ? 0.9 : 1.1;
+      const newScale = Math.min(Math.max(0.25, viewport.scale * zoomFactor), 4);
+      const scaleChange = newScale / viewport.scale;
+      
+      setViewport({
+        scale: newScale,
+        x: screenX - (screenX - viewport.x) * scaleChange,
+        y: screenY - (screenY - viewport.y) * scaleChange,
+      });
+    },
+  }, {
+    drag: { filterTaps: true },
+    pinch: { scaleBounds: { min: 0.25, max: 4 } },
+    wheel: { eventOptions: { passive: false } },
+  });
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="w-full h-full cursor-crosshair"
-      onMouseDown={handlePointerDown}
-      onMouseMove={handlePointerMove}
-      onMouseUp={handlePointerUp}
-      onMouseLeave={handlePointerUp}
-      onTouchStart={handlePointerDown}
-      onTouchMove={handlePointerMove}
-      onTouchEnd={handlePointerUp}
-    />
+    <div ref={containerRef} className="w-full h-full touch-none">
+      <canvas
+        ref={canvasRef}
+        className="w-full h-full cursor-crosshair"
+        {...bind()}
+      />
+    </div>
   );
 }
 
