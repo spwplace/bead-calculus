@@ -113,7 +113,8 @@ function getNodeOutputEdges(
       return [];
     }
 
-    case 'split': {
+    case 'split':
+    case 'cup': {
       const edges: Edge[] = [];
       for (const output of node.outputs) {
         edges.push(...findEdgesFromPort(diagram, nodeId, output.id));
@@ -125,6 +126,18 @@ function getNodeOutputEdges(
       if (node.outputs.length > 0) {
         return findEdgesFromPort(diagram, nodeId, node.outputs[0].id);
       }
+      return [];
+    }
+
+    case 'unit': {
+      if (node.outputs.length > 0) {
+        return findEdgesFromPort(diagram, nodeId, node.outputs[0].id);
+      }
+      return [];
+    }
+
+    case 'counit':
+    case 'cap': {
       return [];
     }
 
@@ -231,9 +244,48 @@ function processNodeArrival(
       };
     }
 
+    case 'counit': {
+      return {
+        outputBeads: [],
+        feedbackBeads: [],
+        consumed: true,
+      };
+    }
+
+    case 'cap': {
+      if (checkCapReady(diagram, node, [...allBeads, { ...bead, state: 'waiting' as const }])) {
+        return {
+          outputBeads: [],
+          feedbackBeads: [],
+          consumed: true,
+        };
+      }
+      return {
+        outputBeads: [],
+        feedbackBeads: [],
+        consumed: false,
+      };
+    }
+
     default:
       return { outputBeads: [], feedbackBeads: [], consumed: true };
   }
+}
+
+function checkCapReady(
+  _diagram: Diagram,
+  node: Node,
+  beads: Bead[]
+): boolean {
+  const beadsAtInputs = node.inputs.filter(inputPort => {
+    return beads.some(b =>
+      b.state === 'waiting' &&
+      b.position.type === 'at-node' &&
+      b.position.nodeId === node.id &&
+      b.position.portId === inputPort.id
+    );
+  });
+  return beadsAtInputs.length === node.inputs.length;
 }
 
 function processFeedbackArrival(

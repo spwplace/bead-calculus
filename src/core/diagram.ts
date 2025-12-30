@@ -20,7 +20,11 @@ export type NodeType =
   | 'split'
   | 'merge'
   | 'trace-in'
-  | 'trace-out';
+  | 'trace-out'
+  | 'unit'
+  | 'counit'
+  | 'cup'
+  | 'cap';
 
 export const NODE_DIMENSIONS: Record<NodeType, { width: number; height: number }> = {
   'identity': { width: 40, height: 40 },
@@ -30,6 +34,10 @@ export const NODE_DIMENSIONS: Record<NodeType, { width: number; height: number }
   'merge': { width: 50, height: 60 },
   'trace-in': { width: 50, height: 50 },
   'trace-out': { width: 50, height: 50 },
+  'unit': { width: 40, height: 40 },
+  'counit': { width: 40, height: 40 },
+  'cup': { width: 60, height: 50 },
+  'cap': { width: 60, height: 50 },
 };
 
 export const NODE_NAMES: Record<NodeType, string> = {
@@ -40,6 +48,10 @@ export const NODE_NAMES: Record<NodeType, string> = {
   'merge': 'Merge',
   'trace-in': 'Loop In',
   'trace-out': 'Loop Out',
+  'unit': 'Source',
+  'counit': 'Sink',
+  'cup': 'Cup',
+  'cap': 'Cap',
 };
 
 export interface Node {
@@ -63,10 +75,18 @@ export interface TracePair {
   kind: BeadKind;
 }
 
+export interface CupCapPair {
+  id: string;
+  cupNodeId: string;
+  capNodeId: string;
+  kind: BeadKind;
+}
+
 export interface Diagram {
   nodes: Node[];
   edges: Edge[];
   tracePairs: TracePair[];
+  cupCapPairs: CupCapPair[];
   boundaryInputs: Port[];
   boundaryOutputs: Port[];
 }
@@ -105,6 +125,14 @@ function getDefaultPorts(type: NodeType): { inputs: BeadKind[]; outputs: BeadKin
       return { inputs: ['signal'], outputs: ['signal'] };
     case 'trace-out':
       return { inputs: ['signal'], outputs: ['signal'] };
+    case 'unit':
+      return { inputs: [], outputs: ['signal'] };
+    case 'counit':
+      return { inputs: ['signal'], outputs: [] };
+    case 'cup':
+      return { inputs: [], outputs: ['signal', 'signal'] };
+    case 'cap':
+      return { inputs: ['signal', 'signal'], outputs: [] };
     default:
       return { inputs: [], outputs: [] };
   }
@@ -154,17 +182,32 @@ export function createTracePair(
   };
 }
 
+export function createCupCapPair(
+  cupNodeId: string,
+  capNodeId: string,
+  kind: BeadKind = 'signal'
+): CupCapPair {
+  return {
+    id: generateId('cupcap'),
+    cupNodeId,
+    capNodeId,
+    kind,
+  };
+}
+
 export function createDiagram(
   nodes: Node[] = [],
   edges: Edge[] = [],
   boundaryInputs: Port[] = [],
   boundaryOutputs: Port[] = [],
-  tracePairs: TracePair[] = []
+  tracePairs: TracePair[] = [],
+  cupCapPairs: CupCapPair[] = []
 ): Diagram {
   return {
     nodes,
     edges,
     tracePairs,
+    cupCapPairs,
     boundaryInputs,
     boundaryOutputs,
   };
@@ -390,6 +433,9 @@ export function deserializeDiagram(json: string): Diagram {
   if (!parsed.tracePairs) {
     parsed.tracePairs = [];
   }
+  if (!parsed.cupCapPairs) {
+    parsed.cupCapPairs = [];
+  }
   return parsed;
 }
 
@@ -404,6 +450,9 @@ export function removeNode(diagram: Diagram, nodeId: string): Diagram {
     edges: diagram.edges.filter(e => e.from.nodeId !== nodeId && e.to.nodeId !== nodeId),
     tracePairs: diagram.tracePairs.filter(
       tp => tp.traceInNodeId !== nodeId && tp.traceOutNodeId !== nodeId
+    ),
+    cupCapPairs: diagram.cupCapPairs.filter(
+      cc => cc.cupNodeId !== nodeId && cc.capNodeId !== nodeId
     ),
   };
 }

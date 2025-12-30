@@ -7,7 +7,7 @@ import {
   computeTensorFactors,
 } from './diagram';
 
-export type RewriteRuleName = 'slide' | 'straighten' | 'thread' | 'superpose';
+export type RewriteRuleName = 'slide' | 'straighten' | 'thread' | 'superpose' | 'swap-involution' | 'snake';
 
 export interface RewriteMatch {
   rule: RewriteRuleName;
@@ -475,12 +475,197 @@ export function applySuperpose(diagram: Diagram, match: RewriteMatch): RewriteRe
   }
 }
 
+/**
+ * Snake Equation: ε ∘ (id ⊗ η) = id
+ * Cup-cap pair where cup.out[0]→cap.in[1] and cup.out[1]→cap.in[0] cancels to identity
+ */
+export function findSnakeMatches(diagram: Diagram): RewriteMatch[] {
+  const matches: RewriteMatch[] = [];
+
+  for (const cupCapPair of diagram.cupCapPairs) {
+    const cup = findNode(diagram, cupCapPair.cupNodeId);
+    const cap = findNode(diagram, cupCapPair.capNodeId);
+    if (!cup || !cap) continue;
+
+    const cupOut0ToCap = diagram.edges.find(
+      e => e.from.nodeId === cup.id && e.from.portId === cup.outputs[0]?.id &&
+           e.to.nodeId === cap.id && e.to.portId === cap.inputs[1]?.id
+    );
+    const cupOut1ToCap = diagram.edges.find(
+      e => e.from.nodeId === cup.id && e.from.portId === cup.outputs[1]?.id &&
+           e.to.nodeId === cap.id && e.to.portId === cap.inputs[0]?.id
+    );
+
+    if (cupOut0ToCap && cupOut1ToCap) {
+      matches.push({
+        rule: 'snake',
+        nodeIds: [cup.id, cap.id],
+        description: 'Snake equation: cup-cap pair cancels to identity (ε ∘ (id ⊗ η) = id)',
+      });
+    }
+  }
+
+  for (const cup of diagram.nodes.filter(n => n.type === 'cup')) {
+    for (const cap of diagram.nodes.filter(n => n.type === 'cap')) {
+      if (diagram.cupCapPairs.some(cc => cc.cupNodeId === cup.id && cc.capNodeId === cap.id)) {
+        continue;
+      }
+
+      const cupOut0ToCap = diagram.edges.find(
+        e => e.from.nodeId === cup.id && e.from.portId === cup.outputs[0]?.id &&
+             e.to.nodeId === cap.id && e.to.portId === cap.inputs[1]?.id
+      );
+      const cupOut1ToCap = diagram.edges.find(
+        e => e.from.nodeId === cup.id && e.from.portId === cup.outputs[1]?.id &&
+             e.to.nodeId === cap.id && e.to.portId === cap.inputs[0]?.id
+      );
+
+      if (cupOut0ToCap && cupOut1ToCap) {
+        matches.push({
+          rule: 'snake',
+          nodeIds: [cup.id, cap.id],
+          description: 'Snake equation: cup-cap cancellation',
+        });
+      }
+    }
+  }
+
+  return matches;
+}
+
+export function applySnake(diagram: Diagram, match: RewriteMatch): RewriteResult {
+  if (match.nodeIds.length !== 2) {
+    return { success: false, diagram, message: 'Snake requires cup and cap pair' };
+  }
+
+  const [cupId, capId] = match.nodeIds;
+  const cup = findNode(diagram, cupId);
+  const cap = findNode(diagram, capId);
+
+  if (!cup || !cap || cup.type !== 'cup' || cap.type !== 'cap') {
+    return { success: false, diagram, message: 'Invalid cup/cap nodes' };
+  }
+
+  const newNodes = diagram.nodes.filter(n => n.id !== cupId && n.id !== capId);
+  const newEdges = diagram.edges.filter(
+    e => e.from.nodeId !== cupId && e.from.nodeId !== capId &&
+         e.to.nodeId !== cupId && e.to.nodeId !== capId
+  );
+  const newCupCapPairs = diagram.cupCapPairs.filter(
+    cc => cc.cupNodeId !== cupId && cc.capNodeId !== capId
+  );
+
+  return {
+    success: true,
+    diagram: {
+      ...diagram,
+      nodes: newNodes,
+      edges: newEdges,
+      cupCapPairs: newCupCapPairs,
+    },
+    message: 'Applied snake equation: cup-cap cancelled (ε ∘ (id ⊗ η) = id)',
+  };
+}
+
+/**
+ * Swap Involution: σ ∘ σ = id
+ * Two consecutive swaps (out[0]→in[0], out[1]→in[1]) cancel to straight wires
+ */
+export function findSwapInvolutionMatches(diagram: Diagram): RewriteMatch[] {
+  const matches: RewriteMatch[] = [];
+
+  for (const swap1 of diagram.nodes.filter(n => n.type === 'swap')) {
+    for (const swap2 of diagram.nodes.filter(n => n.type === 'swap' && n.id !== swap1.id)) {
+      const out0ToIn0 = diagram.edges.find(
+        e => e.from.nodeId === swap1.id && e.from.portId === swap1.outputs[0]?.id &&
+             e.to.nodeId === swap2.id && e.to.portId === swap2.inputs[0]?.id
+      );
+      const out1ToIn1 = diagram.edges.find(
+        e => e.from.nodeId === swap1.id && e.from.portId === swap1.outputs[1]?.id &&
+             e.to.nodeId === swap2.id && e.to.portId === swap2.inputs[1]?.id
+      );
+
+      if (out0ToIn0 && out1ToIn1) {
+        matches.push({
+          rule: 'swap-involution',
+          nodeIds: [swap1.id, swap2.id],
+          description: 'Swap involution: two swaps cancel (σ ∘ σ = id)',
+        });
+      }
+    }
+  }
+
+  return matches;
+}
+
+export function applySwapInvolution(diagram: Diagram, match: RewriteMatch): RewriteResult {
+  if (match.nodeIds.length !== 2) {
+    return { success: false, diagram, message: 'Swap involution requires two swap nodes' };
+  }
+
+  const [swap1Id, swap2Id] = match.nodeIds;
+  const swap1 = findNode(diagram, swap1Id);
+  const swap2 = findNode(diagram, swap2Id);
+
+  if (!swap1 || !swap2 || swap1.type !== 'swap' || swap2.type !== 'swap') {
+    return { success: false, diagram, message: 'Invalid swap nodes' };
+  }
+
+  const newDiagram = cloneDiagram(diagram);
+
+  const incomingToSwap1_0 = newDiagram.edges.find(
+    e => e.to.nodeId === swap1Id && e.to.portId === swap1.inputs[0]?.id
+  );
+  const incomingToSwap1_1 = newDiagram.edges.find(
+    e => e.to.nodeId === swap1Id && e.to.portId === swap1.inputs[1]?.id
+  );
+
+  const outgoingFromSwap2_0 = newDiagram.edges.find(
+    e => e.from.nodeId === swap2Id && e.from.portId === swap2.outputs[0]?.id
+  );
+  const outgoingFromSwap2_1 = newDiagram.edges.find(
+    e => e.from.nodeId === swap2Id && e.from.portId === swap2.outputs[1]?.id
+  );
+
+  newDiagram.edges = newDiagram.edges.filter(
+    e => e.from.nodeId !== swap1Id && e.from.nodeId !== swap2Id &&
+         e.to.nodeId !== swap1Id && e.to.nodeId !== swap2Id
+  );
+
+  newDiagram.nodes = newDiagram.nodes.filter(n => n.id !== swap1Id && n.id !== swap2Id);
+
+  if (incomingToSwap1_0 && outgoingFromSwap2_0) {
+    newDiagram.edges.push(createEdge(
+      incomingToSwap1_0.from.nodeId,
+      incomingToSwap1_0.from.portId,
+      outgoingFromSwap2_0.to.nodeId,
+      outgoingFromSwap2_0.to.portId
+    ));
+  }
+  if (incomingToSwap1_1 && outgoingFromSwap2_1) {
+    newDiagram.edges.push(createEdge(
+      incomingToSwap1_1.from.nodeId,
+      incomingToSwap1_1.from.portId,
+      outgoingFromSwap2_1.to.nodeId,
+      outgoingFromSwap2_1.to.portId
+    ));
+  }
+
+  return {
+    success: true,
+    diagram: newDiagram,
+    message: 'Applied swap involution: σ ∘ σ = id',
+  };
+}
+
 export function findAllRewriteMatches(diagram: Diagram): RewriteMatch[] {
   return [
     ...findSlideMatches(diagram),
     ...findStraightenMatches(diagram),
     ...findThreadMatches(diagram),
     ...findSuperposeMatches(diagram),
+    ...findSnakeMatches(diagram),
+    ...findSwapInvolutionMatches(diagram),
   ];
 }
 
@@ -494,6 +679,10 @@ export function applyRewrite(diagram: Diagram, match: RewriteMatch): RewriteResu
       return applyThread(diagram, match);
     case 'superpose':
       return applySuperpose(diagram, match);
+    case 'snake':
+      return applySnake(diagram, match);
+    case 'swap-involution':
+      return applySwapInvolution(diagram, match);
     default:
       return { success: false, diagram, message: 'Unknown rewrite rule' };
   }

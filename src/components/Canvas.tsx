@@ -85,6 +85,10 @@ export function Canvas({
         drawEdge(ctx, diagram, edge.id, viewMode);
       }
 
+      for (const tracePair of diagram.tracePairs) {
+        drawFeedbackArc(ctx, diagram, tracePair.traceInNodeId, tracePair.traceOutNodeId, viewMode);
+      }
+
       for (const node of diagram.nodes) {
         drawNode(ctx, node, selectedNodeIds.has(node.id), viewMode);
       }
@@ -361,6 +365,39 @@ function drawNodeDecoration(
       ctx.stroke();
       break;
     }
+    case 'cup': {
+      ctx.beginPath();
+      ctx.arc(x + dims.width / 2, y + dims.height, dims.width / 3, Math.PI, 0, true);
+      ctx.stroke();
+      break;
+    }
+    case 'cap': {
+      ctx.beginPath();
+      ctx.arc(x + dims.width / 2, y, dims.width / 3, 0, Math.PI, true);
+      ctx.stroke();
+      break;
+    }
+    case 'unit': {
+      ctx.fillStyle = '#22c55e';
+      ctx.beginPath();
+      ctx.arc(x + dims.width / 2, y + dims.height / 2, 8, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'counit': {
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.arc(x + dims.width / 2, y + dims.height / 2, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.moveTo(x + dims.width / 2 - 5, y + dims.height / 2 - 5);
+      ctx.lineTo(x + dims.width / 2 + 5, y + dims.height / 2 + 5);
+      ctx.moveTo(x + dims.width / 2 + 5, y + dims.height / 2 - 5);
+      ctx.lineTo(x + dims.width / 2 - 5, y + dims.height / 2 + 5);
+      ctx.stroke();
+      break;
+    }
   }
 }
 
@@ -455,6 +492,53 @@ function drawEdge(
   ctx.moveTo(fromPos.x, fromPos.y);
   ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, toPos.x, toPos.y);
   ctx.stroke();
+}
+
+function drawFeedbackArc(
+  ctx: CanvasRenderingContext2D,
+  diagram: Diagram,
+  traceInNodeId: string,
+  traceOutNodeId: string,
+  viewMode: 'machine' | 'diagram'
+) {
+  const traceIn = diagram.nodes.find(n => n.id === traceInNodeId);
+  const traceOut = diagram.nodes.find(n => n.id === traceOutNodeId);
+  if (!traceIn || !traceOut) return;
+
+  const traceInDims = NODE_DIMENSIONS[traceIn.type];
+  const traceOutDims = NODE_DIMENSIONS[traceOut.type];
+
+  const startX = traceOut.position.x + traceOutDims.width / 2;
+  const startY = traceOut.position.y;
+  const endX = traceIn.position.x + traceInDims.width / 2;
+  const endY = traceIn.position.y;
+
+  const arcHeight = 50;
+  const midY = Math.min(startY, endY) - arcHeight;
+
+  ctx.strokeStyle = viewMode === 'machine' ? '#a855f7' : '#94a3b8';
+  ctx.lineWidth = viewMode === 'machine' ? 3 : 2;
+  ctx.setLineDash([8, 4]);
+
+  ctx.beginPath();
+  ctx.moveTo(startX, startY);
+  ctx.bezierCurveTo(
+    startX, midY,
+    endX, midY,
+    endX, endY
+  );
+  ctx.stroke();
+
+  ctx.setLineDash([]);
+
+  const arrowSize = 6;
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.beginPath();
+  ctx.moveTo(endX, endY);
+  ctx.lineTo(endX - arrowSize, endY - arrowSize * 1.5);
+  ctx.lineTo(endX + arrowSize, endY - arrowSize * 1.5);
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawBead(ctx: CanvasRenderingContext2D, diagram: Diagram, bead: Bead) {
@@ -574,6 +658,10 @@ function getNodeLabel(type: Node['type']): string {
     'merge': 'A',
     'trace-in': 'Ti',
     'trace-out': 'To',
+    'unit': 'I',
+    'counit': '*',
+    'cup': 'U',
+    'cap': 'n',
   };
   return labels[type];
 }

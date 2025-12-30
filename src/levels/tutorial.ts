@@ -226,6 +226,109 @@ export function createLevel6_Superpose(): Level {
   };
 }
 
+export function createLevel7_SwapInvolution(): Level {
+  resetIdCounter();
+
+  const id1 = createNode('identity', { x: 50, y: 100 });
+  const id2 = createNode('identity', { x: 50, y: 200 });
+  const swap1 = createNode('swap', { x: 150, y: 130 });
+  const swap2 = createNode('swap', { x: 250, y: 130 });
+  const id3 = createNode('identity', { x: 350, y: 100 });
+  const id4 = createNode('identity', { x: 350, y: 200 });
+
+  const edges = [
+    createEdge(id1.id, id1.outputs[0].id, swap1.id, swap1.inputs[0].id),
+    createEdge(id2.id, id2.outputs[0].id, swap1.id, swap1.inputs[1].id),
+    createEdge(swap1.id, swap1.outputs[0].id, swap2.id, swap2.inputs[0].id),
+    createEdge(swap1.id, swap1.outputs[1].id, swap2.id, swap2.inputs[1].id),
+    createEdge(swap2.id, swap2.outputs[0].id, id3.id, id3.inputs[0].id),
+    createEdge(swap2.id, swap2.outputs[1].id, id4.id, id4.inputs[0].id),
+  ];
+
+  const initial = createDiagram(
+    [id1, id2, swap1, swap2, id3, id4],
+    edges,
+    [createPort('signal', 'input'), createPort('signal', 'input')],
+    [createPort('signal', 'output'), createPort('signal', 'output')],
+    []
+  );
+
+  return {
+    id: 'tutorial-7',
+    name: 'Swap Involution',
+    description: 'Swapping twice returns to the original: σ ∘ σ = id. Cancel the two consecutive swaps!',
+    mode: 'rewrite',
+    initial,
+    availableMoves: ['swap-involution'],
+  };
+}
+
+export function createLevel8_Snake(): Level {
+  resetIdCounter();
+
+  const cup = createNode('cup', { x: 150, y: 120 });
+  const cap = createNode('cap', { x: 250, y: 120 });
+
+  const edges = [
+    createEdge(cup.id, cup.outputs[0].id, cap.id, cap.inputs[1].id),
+    createEdge(cup.id, cup.outputs[1].id, cap.id, cap.inputs[0].id),
+  ];
+
+  const initial = createDiagram(
+    [cup, cap],
+    edges,
+    [],
+    [],
+    [],
+    []
+  );
+
+  return {
+    id: 'tutorial-8',
+    name: 'Snake Equation',
+    description: 'The snake equation: ε ∘ (id ⊗ η) = id. A cup feeding crossed into a cap cancels completely - yank the snake straight!',
+    mode: 'rewrite',
+    initial,
+    availableMoves: ['snake'],
+  };
+}
+
+export function createLevel9_CompactClosed(): Level {
+  resetIdCounter();
+
+  const id1 = createNode('identity', { x: 50, y: 150 });
+  const cup = createNode('cup', { x: 150, y: 100 });
+  const swap = createNode('swap', { x: 250, y: 130 });
+  const cap = createNode('cap', { x: 350, y: 100 });
+  const id2 = createNode('identity', { x: 450, y: 150 });
+
+  const edges = [
+    createEdge(id1.id, id1.outputs[0].id, swap.id, swap.inputs[0].id),
+    createEdge(cup.id, cup.outputs[0].id, swap.id, swap.inputs[1].id),
+    createEdge(swap.id, swap.outputs[0].id, cap.id, cap.inputs[0].id),
+    createEdge(cup.id, cup.outputs[1].id, cap.id, cap.inputs[1].id),
+    createEdge(swap.id, swap.outputs[1].id, id2.id, id2.inputs[0].id),
+  ];
+
+  const initial = createDiagram(
+    [id1, cup, swap, cap, id2],
+    edges,
+    [createPort('signal', 'input')],
+    [createPort('signal', 'output')],
+    [],
+    []
+  );
+
+  return {
+    id: 'tutorial-9',
+    name: 'Compact Closed',
+    description: 'Combine swap involution and snake equation to simplify this tangled diagram. The cup and cap with a swap in between is secretly just a wire!',
+    mode: 'rewrite',
+    initial,
+    availableMoves: ['snake', 'swap-involution', 'slide'],
+  };
+}
+
 export const TUTORIAL_LEVELS: Level[] = [
   createLevel1_Slide(),
   createLevel2_Straighten(),
@@ -233,6 +336,9 @@ export const TUTORIAL_LEVELS: Level[] = [
   createLevel4_FeedbackLoop(),
   createLevel5_Combined(),
   createLevel6_Superpose(),
+  createLevel7_SwapInvolution(),
+  createLevel8_Snake(),
+  createLevel9_CompactClosed(),
 ];
 
 export function getLevelById(id: string): Level | undefined {
