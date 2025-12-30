@@ -3,11 +3,16 @@ import { Canvas } from './components/Canvas';
 import { Controls } from './components/Controls';
 import { LevelSelector } from './components/LevelSelector';
 import { BeadCounter } from './components/InvariantIndicator';
+import { Onboarding, HelpButton } from './components/Onboarding';
+import { BuildPalette } from './components/BuildPalette';
 import { useGameStore } from './hooks/useGameStore';
 import type { RewriteMatch } from './core/rewrite';
 import { applyRewrite, findAllRewriteMatches } from './core/rewrite';
 import { countBeadsByKind, countActiveBeads } from './core/invariant';
 import { TUTORIAL_LEVELS, type Level } from './levels/tutorial';
+import type { NodeType } from './core/diagram';
+import { createDiagram } from './core/diagram';
+import { soundEngine, initSoundOnInteraction, triggerHaptic } from './core/sound';
 
 export default function App() {
   const {
@@ -24,6 +29,13 @@ export default function App() {
     clearBeads,
     getBeads,
     loadLevel,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    mode,
+    setMode,
+    addNodeAtPosition,
   } = useGameStore();
 
   const [viewMode, setViewMode] = useState<'machine' | 'diagram'>('machine');
@@ -32,6 +44,12 @@ export default function App() {
   const [beadCounts, setBeadCounts] = useState<Map<string, number>>(new Map());
   const [showLevelSelector, setShowLevelSelector] = useState(false);
   const [currentLevel, setCurrentLevel] = useState<Level | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [_draggingNodeType, setDraggingNodeType] = useState<NodeType | null>(null);
+
+  useEffect(() => {
+    initSoundOnInteraction();
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -42,15 +60,39 @@ export default function App() {
     return () => clearInterval(interval);
   }, [getBeads]);
 
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
+
   const availableRewrites = findAllRewriteMatches(diagram);
 
   const handleApplyRewrite = useCallback((match: RewriteMatch) => {
     const result = applyRewrite(diagram, match);
     if (result.success) {
       setDiagram(result.diagram);
+      soundEngine.playRewrite(match.rule);
+      triggerHaptic('medium');
       if (result.diagram.nodes.length <= 2 && 
           (match.rule === 'straighten' || match.rule === 'snake' || match.rule === 'swap-involution')) {
         setShowQED(true);
+        soundEngine.playQED();
+        triggerHaptic('success');
         setTimeout(() => setShowQED(false), 3000);
       }
     }
@@ -59,6 +101,8 @@ export default function App() {
   const handleInjectBead = useCallback(() => {
     if (diagram.edges.length > 0) {
       injectBead(diagram.edges[0].id, 'signal');
+      soundEngine.playBeadDrop();
+      triggerHaptic('light');
     }
   }, [diagram.edges, injectBead]);
 
@@ -66,7 +110,24 @@ export default function App() {
     loadLevel(level.initial);
     setCurrentLevel(level);
     setShowLevelSelector(false);
+    setShowOnboarding(true);
   }, [loadLevel]);
+
+  const handleEnterSandbox = useCallback(() => {
+    loadLevel(createDiagram(), null, 'sandbox');
+    setCurrentLevel(null);
+    setShowLevelSelector(false);
+    setMode('sandbox');
+  }, [loadLevel, setMode]);
+
+  const handleDragStart = useCallback((type: NodeType) => {
+    setDraggingNodeType(type);
+  }, []);
+
+  const handleNodeAdd = useCallback((type: NodeType) => {
+    addNodeAtPosition(type, 200 + Math.random() * 200, 150 + Math.random() * 100);
+    soundEngine.playNodePlace();
+  }, [addNodeAtPosition]);
 
   return (
     <div className="h-full w-full flex flex-col bg-[#0f0f1a]">
@@ -80,6 +141,17 @@ export default function App() {
           )}
         </div>
         <div className="flex gap-2">
+          <HelpButton onClick={() => setShowOnboarding(true)} />
+          <button
+            onClick={handleEnterSandbox}
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors touch-target ${
+              mode === 'sandbox' 
+                ? 'bg-[#f59e0b] text-black' 
+                : 'bg-[#2a2a4e] hover:bg-[#3a3a5e]'
+            }`}
+          >
+            Sandbox
+          </button>
           <button
             onClick={() => setShowLevelSelector(true)}
             className="px-3 py-1.5 text-sm bg-[#6366f1] text-white rounded-md hover:bg-[#5355d1] transition-colors touch-target"
@@ -103,6 +175,13 @@ export default function App() {
           onBackgroundClick={clearSelection}
         />
 
+        {mode === 'sandbox' && (
+          <BuildPalette
+            onDragStart={handleDragStart}
+            onNodeAdd={handleNodeAdd}
+          />
+        )}
+
         <BeadCounter counts={beadCounts} total={beadCount} />
 
         {showQED && (
@@ -119,11 +198,15 @@ export default function App() {
         speed={speed}
         beadCount={beadCount}
         availableRewrites={availableRewrites}
+        canUndo={canUndo()}
+        canRedo={canRedo()}
         onTogglePlayPause={togglePause}
         onInjectBead={handleInjectBead}
         onClearBeads={clearBeads}
         onSpeedChange={setSpeed}
         onApplyRewrite={handleApplyRewrite}
+        onUndo={undo}
+        onRedo={redo}
       />
 
       {showLevelSelector && (
@@ -132,6 +215,13 @@ export default function App() {
           currentLevelId={currentLevel?.id ?? null}
           onSelectLevel={handleSelectLevel}
           onClose={() => setShowLevelSelector(false)}
+        />
+      )}
+
+      {showOnboarding && (
+        <Onboarding
+          level={currentLevel}
+          onDismiss={() => setShowOnboarding(false)}
         />
       )}
     </div>

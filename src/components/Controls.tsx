@@ -5,11 +5,15 @@ interface ControlsProps {
   speed: number;
   beadCount: number;
   availableRewrites: RewriteMatch[];
+  canUndo: boolean;
+  canRedo: boolean;
   onTogglePlayPause: () => void;
   onInjectBead: () => void;
   onClearBeads: () => void;
   onSpeedChange: (speed: number) => void;
   onApplyRewrite: (match: RewriteMatch) => void;
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
 export function Controls({
@@ -17,11 +21,15 @@ export function Controls({
   speed,
   beadCount,
   availableRewrites,
+  canUndo,
+  canRedo,
   onTogglePlayPause,
   onInjectBead,
   onClearBeads,
   onSpeedChange,
   onApplyRewrite,
+  onUndo,
+  onRedo,
 }: ControlsProps) {
   return (
     <div className="bg-[#1a1a2e] border-t border-[#2a2a4e] px-4 py-3">
@@ -54,6 +62,29 @@ export function Controls({
             className="px-3 h-10 bg-[#3a3a5e] hover:bg-[#4a4a6e] rounded-lg transition-colors touch-target text-sm"
           >
             Clear ({beadCount})
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onUndo}
+            disabled={!canUndo}
+            className="w-10 h-10 flex items-center justify-center bg-[#3a3a5e] hover:bg-[#4a4a6e] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors touch-target"
+            title="Undo (Ctrl+Z)"
+          >
+            <svg className="w-5 h-5 text-[#e2e8f0]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+            </svg>
+          </button>
+          <button
+            onClick={onRedo}
+            disabled={!canRedo}
+            className="w-10 h-10 flex items-center justify-center bg-[#3a3a5e] hover:bg-[#4a4a6e] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors touch-target"
+            title="Redo (Ctrl+Shift+Z)"
+          >
+            <svg className="w-5 h-5 text-[#e2e8f0]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+            </svg>
           </button>
         </div>
 

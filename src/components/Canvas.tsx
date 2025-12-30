@@ -119,6 +119,8 @@ export function Canvas({
 
       drawParticles(ctx, activeAnimations);
 
+      drawInvariantGlow(ctx, beads.length, canvasSize.width / viewport.scale, canvasSize.height / viewport.scale, currentTime);
+
       ctx.restore();
       ctx.restore();
 
@@ -793,4 +795,28 @@ function getNodeLabel(type: Node['type']): string {
     'cap': 'n',
   };
   return labels[type];
+}
+
+function drawInvariantGlow(
+  ctx: CanvasRenderingContext2D, 
+  beadCount: number, 
+  width: number, 
+  height: number,
+  time: number
+) {
+  if (beadCount === 0) return;
+  
+  const pulse = Math.sin(time * 0.003) * 0.3 + 0.7;
+  const glowColor = beadCount > 0 ? `rgba(34, 197, 94, ${0.15 * pulse})` : 'rgba(239, 68, 68, 0.15)';
+  
+  const gradient = ctx.createRadialGradient(
+    width / 2, height / 2, 0,
+    width / 2, height / 2, Math.max(width, height) / 2
+  );
+  gradient.addColorStop(0, 'transparent');
+  gradient.addColorStop(0.7, 'transparent');
+  gradient.addColorStop(1, glowColor);
+  
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, height);
 }
