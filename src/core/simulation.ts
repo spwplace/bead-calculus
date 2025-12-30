@@ -1,5 +1,5 @@
 import type { Diagram, Node, BeadKind, Edge } from './diagram';
-import { findNode, findEdgesFromPort } from './diagram';
+import { findNode, findEdgesFromPort, findTracePairByTraceOut } from './diagram';
 
 export interface Bead {
   id: string;
@@ -11,7 +11,8 @@ export interface Bead {
 
 export type BeadPosition =
   | { type: 'on-edge'; edgeId: string; progress: number }
-  | { type: 'at-node'; nodeId: string; portId: string };
+  | { type: 'at-node'; nodeId: string; portId: string }
+  | { type: 'in-feedback'; tracePairId: string; progress: number };
 
 export interface SimulationState {
   beads: Bead[];
@@ -31,7 +32,20 @@ export function createBead(
     id: `bead_${++beadIdCounter}`,
     kind,
     position: { type: 'on-edge', edgeId, progress },
-    velocity: 0.02,
+    velocity: 0.002,
+    state: 'moving',
+  };
+}
+
+export function createFeedbackBead(
+  kind: BeadKind,
+  tracePairId: string
+): Bead {
+  return {
+    id: `bead_${++beadIdCounter}`,
+    kind,
+    position: { type: 'in-feedback', tracePairId, progress: 0 },
+    velocity: 0.003,
     state: 'moving',
   };
 }
@@ -76,7 +90,13 @@ function getNodeOutputEdges(
   switch (node.type) {
     case 'identity':
     case 'delay':
-    case 'trace-in':
+    case 'trace-in': {
+      if (node.outputs.length > 0) {
+        return findEdgesFromPort(diagram, nodeId, node.outputs[0].id);
+      }
+      return [];
+    }
+
     case 'trace-out': {
       if (node.outputs.length > 0) {
         return findEdgesFromPort(diagram, nodeId, node.outputs[0].id);
@@ -115,6 +135,7 @@ function getNodeOutputEdges(
 
 interface NodeProcessingResult {
   outputBeads: Array<{ edgeId: string; kind: BeadKind }>;
+  feedbackBeads: Array<{ tracePairId: string; kind: BeadKind }>;
   consumed: boolean;
   delay?: number;
 }
@@ -146,10 +167,26 @@ function processNodeArrival(
 
   switch (node.type) {
     case 'identity':
-    case 'trace-in':
-    case 'trace-out': {
+    case 'trace-in': {
       return {
         outputBeads: outputEdges.map(e => ({ edgeId: e.id, kind: bead.kind })),
+        feedbackBeads: [],
+        consumed: true,
+      };
+    }
+
+    case 'trace-out': {
+      const tracePair = findTracePairByTraceOut(diagram, node.id);
+      if (tracePair) {
+        return {
+          outputBeads: outputEdges.map(e => ({ edgeId: e.id, kind: bead.kind })),
+          feedbackBeads: [{ tracePairId: tracePair.id, kind: bead.kind }],
+          consumed: true,
+        };
+      }
+      return {
+        outputBeads: outputEdges.map(e => ({ edgeId: e.id, kind: bead.kind })),
+        feedbackBeads: [],
         consumed: true,
       };
     }
@@ -157,6 +194,7 @@ function processNodeArrival(
     case 'delay': {
       return {
         outputBeads: outputEdges.map(e => ({ edgeId: e.id, kind: bead.kind })),
+        feedbackBeads: [],
         consumed: true,
         delay: 500,
       };
@@ -165,6 +203,7 @@ function processNodeArrival(
     case 'swap': {
       return {
         outputBeads: outputEdges.map(e => ({ edgeId: e.id, kind: bead.kind })),
+        feedbackBeads: [],
         consumed: true,
       };
     }
@@ -172,6 +211,7 @@ function processNodeArrival(
     case 'split': {
       return {
         outputBeads: outputEdges.map(e => ({ edgeId: e.id, kind: bead.kind })),
+        feedbackBeads: [],
         consumed: true,
       };
     }
@@ -180,18 +220,38 @@ function processNodeArrival(
       if (checkMergeReady(diagram, node, [...allBeads, { ...bead, state: 'waiting' as const }])) {
         return {
           outputBeads: outputEdges.map(e => ({ edgeId: e.id, kind: bead.kind })),
+          feedbackBeads: [],
           consumed: true,
         };
       }
       return {
         outputBeads: [],
+        feedbackBeads: [],
         consumed: false,
       };
     }
 
     default:
-      return { outputBeads: [], consumed: true };
+      return { outputBeads: [], feedbackBeads: [], consumed: true };
   }
+}
+
+function processFeedbackArrival(
+  diagram: Diagram,
+  tracePairId: string,
+  bead: Bead
+): { outputBeads: Array<{ edgeId: string; kind: BeadKind }> } {
+  const tracePair = diagram.tracePairs.find(tp => tp.id === tracePairId);
+  if (!tracePair) return { outputBeads: [] };
+  
+  const traceInNode = findNode(diagram, tracePair.traceInNodeId);
+  if (!traceInNode || traceInNode.outputs.length === 0) return { outputBeads: [] };
+  
+  const outputEdges = findEdgesFromPort(diagram, traceInNode.id, traceInNode.outputs[0].id);
+  
+  return {
+    outputBeads: outputEdges.map(e => ({ edgeId: e.id, kind: bead.kind })),
+  };
 }
 
 export function stepSimulation(
@@ -242,6 +302,11 @@ export function stepSimulation(
               const newBead = createBead(output.kind, output.edgeId, 0);
               pendingNewBeads.push(newBead);
             }
+            
+            for (const fb of result.feedbackBeads) {
+              const feedbackBead = createFeedbackBead(fb.kind, fb.tracePairId);
+              pendingNewBeads.push(feedbackBead);
+            }
           } else {
             newBeads.push({
               ...bead,
@@ -251,6 +316,23 @@ export function stepSimulation(
           }
         } else {
           beadsToRemove.add(bead.id);
+        }
+      } else {
+        newBeads.push({
+          ...bead,
+          position: { ...bead.position, progress: newProgress },
+        });
+      }
+    } else if (bead.position.type === 'in-feedback') {
+      const newProgress = bead.position.progress + bead.velocity * dt;
+      
+      if (newProgress >= 1) {
+        beadsToRemove.add(bead.id);
+        
+        const result = processFeedbackArrival(diagram, bead.position.tracePairId, bead);
+        for (const output of result.outputBeads) {
+          const newBead = createBead(output.kind, output.edgeId, 0);
+          pendingNewBeads.push(newBead);
         }
       } else {
         newBeads.push({

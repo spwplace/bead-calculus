@@ -56,9 +56,17 @@ export interface Edge {
   to: { nodeId: string; portId: string };
 }
 
+export interface TracePair {
+  id: string;
+  traceInNodeId: string;
+  traceOutNodeId: string;
+  kind: BeadKind;
+}
+
 export interface Diagram {
   nodes: Node[];
   edges: Edge[];
+  tracePairs: TracePair[];
   boundaryInputs: Port[];
   boundaryOutputs: Port[];
 }
@@ -133,15 +141,30 @@ export function createEdge(
   };
 }
 
+export function createTracePair(
+  traceInNodeId: string,
+  traceOutNodeId: string,
+  kind: BeadKind = 'signal'
+): TracePair {
+  return {
+    id: generateId('trace'),
+    traceInNodeId,
+    traceOutNodeId,
+    kind,
+  };
+}
+
 export function createDiagram(
   nodes: Node[] = [],
   edges: Edge[] = [],
   boundaryInputs: Port[] = [],
-  boundaryOutputs: Port[] = []
+  boundaryOutputs: Port[] = [],
+  tracePairs: TracePair[] = []
 ): Diagram {
   return {
     nodes,
     edges,
+    tracePairs,
     boundaryInputs,
     boundaryOutputs,
   };
@@ -169,6 +192,14 @@ export function findEdgesToPort(diagram: Diagram, nodeId: string, portId: string
   );
 }
 
+export function findTracePairByTraceIn(diagram: Diagram, traceInNodeId: string): TracePair | undefined {
+  return diagram.tracePairs.find(tp => tp.traceInNodeId === traceInNodeId);
+}
+
+export function findTracePairByTraceOut(diagram: Diagram, traceOutNodeId: string): TracePair | undefined {
+  return diagram.tracePairs.find(tp => tp.traceOutNodeId === traceOutNodeId);
+}
+
 export function getConnectedPorts(
   diagram: Diagram,
   nodeId: string,
@@ -184,8 +215,89 @@ export function getConnectedPorts(
   }
 }
 
+export function getNodeInputSources(diagram: Diagram, nodeId: string): Array<{ nodeId: string; portId: string }> {
+  const sources: Array<{ nodeId: string; portId: string }> = [];
+  for (const edge of diagram.edges) {
+    if (edge.to.nodeId === nodeId) {
+      sources.push(edge.from);
+    }
+  }
+  return sources;
+}
+
+export function getNodeOutputTargets(diagram: Diagram, nodeId: string): Array<{ nodeId: string; portId: string }> {
+  const targets: Array<{ nodeId: string; portId: string }> = [];
+  for (const edge of diagram.edges) {
+    if (edge.from.nodeId === nodeId) {
+      targets.push(edge.to);
+    }
+  }
+  return targets;
+}
+
+export function computeTensorFactors(diagram: Diagram): string[][] {
+  const nodeIds = new Set(diagram.nodes.map(n => n.id));
+  const adjacency = new Map<string, Set<string>>();
+  
+  for (const nodeId of nodeIds) {
+    adjacency.set(nodeId, new Set());
+  }
+  
+  for (const edge of diagram.edges) {
+    adjacency.get(edge.from.nodeId)?.add(edge.to.nodeId);
+    adjacency.get(edge.to.nodeId)?.add(edge.from.nodeId);
+  }
+  
+  for (const tp of diagram.tracePairs) {
+    adjacency.get(tp.traceInNodeId)?.add(tp.traceOutNodeId);
+    adjacency.get(tp.traceOutNodeId)?.add(tp.traceInNodeId);
+  }
+  
+  const visited = new Set<string>();
+  const factors: string[][] = [];
+  
+  for (const nodeId of nodeIds) {
+    if (visited.has(nodeId)) continue;
+    
+    const factor: string[] = [];
+    const queue = [nodeId];
+    
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (visited.has(current)) continue;
+      
+      visited.add(current);
+      factor.push(current);
+      
+      for (const neighbor of adjacency.get(current) ?? []) {
+        if (!visited.has(neighbor)) {
+          queue.push(neighbor);
+        }
+      }
+    }
+    
+    factors.push(factor);
+  }
+  
+  return factors;
+}
+
+export function areNodesInSameFactor(diagram: Diagram, nodeIdA: string, nodeIdB: string): boolean {
+  const factors = computeTensorFactors(diagram);
+  for (const factor of factors) {
+    if (factor.includes(nodeIdA) && factor.includes(nodeIdB)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function areNodesInIndependentFactors(diagram: Diagram, nodeIdA: string, nodeIdB: string): boolean {
+  return !areNodesInSameFactor(diagram, nodeIdA, nodeIdB);
+}
+
 export interface ValidationError {
-  type: 'type-mismatch' | 'disconnected-port' | 'cycle' | 'multiple-inputs';
+  type: 'type-mismatch' | 'disconnected-port' | 'cycle' | 'multiple-inputs' | 'invalid-trace-pair';
   message: string;
   location?: { nodeId: string; portId?: string };
 }
@@ -230,6 +342,25 @@ export function validateDiagram(diagram: Diagram): ValidationError[] {
     }
   }
 
+  for (const tp of diagram.tracePairs) {
+    const traceIn = findNode(diagram, tp.traceInNodeId);
+    const traceOut = findNode(diagram, tp.traceOutNodeId);
+    
+    if (!traceIn || traceIn.type !== 'trace-in') {
+      errors.push({
+        type: 'invalid-trace-pair',
+        message: `TracePair ${tp.id} references invalid trace-in node`,
+      });
+    }
+    
+    if (!traceOut || traceOut.type !== 'trace-out') {
+      errors.push({
+        type: 'invalid-trace-pair',
+        message: `TracePair ${tp.id} references invalid trace-out node`,
+      });
+    }
+  }
+
   const inputCounts = new Map<string, number>();
   for (const edge of diagram.edges) {
     const key = `${edge.to.nodeId}:${edge.to.portId}`;
@@ -255,5 +386,45 @@ export function serializeDiagram(diagram: Diagram): string {
 }
 
 export function deserializeDiagram(json: string): Diagram {
-  return JSON.parse(json) as Diagram;
+  const parsed = JSON.parse(json) as Diagram;
+  if (!parsed.tracePairs) {
+    parsed.tracePairs = [];
+  }
+  return parsed;
+}
+
+export function cloneDiagram(diagram: Diagram): Diagram {
+  return JSON.parse(JSON.stringify(diagram));
+}
+
+export function removeNode(diagram: Diagram, nodeId: string): Diagram {
+  return {
+    ...diagram,
+    nodes: diagram.nodes.filter(n => n.id !== nodeId),
+    edges: diagram.edges.filter(e => e.from.nodeId !== nodeId && e.to.nodeId !== nodeId),
+    tracePairs: diagram.tracePairs.filter(
+      tp => tp.traceInNodeId !== nodeId && tp.traceOutNodeId !== nodeId
+    ),
+  };
+}
+
+export function removeEdge(diagram: Diagram, edgeId: string): Diagram {
+  return {
+    ...diagram,
+    edges: diagram.edges.filter(e => e.id !== edgeId),
+  };
+}
+
+export function addEdge(diagram: Diagram, edge: Edge): Diagram {
+  return {
+    ...diagram,
+    edges: [...diagram.edges, edge],
+  };
+}
+
+export function removeTracePair(diagram: Diagram, tracePairId: string): Diagram {
+  return {
+    ...diagram,
+    tracePairs: diagram.tracePairs.filter(tp => tp.id !== tracePairId),
+  };
 }

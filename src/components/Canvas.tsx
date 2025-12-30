@@ -458,6 +458,14 @@ function drawEdge(
 }
 
 function drawBead(ctx: CanvasRenderingContext2D, diagram: Diagram, bead: Bead) {
+  if (bead.position.type === 'on-edge') {
+    drawBeadOnEdge(ctx, diagram, bead);
+  } else if (bead.position.type === 'in-feedback') {
+    drawBeadInFeedback(ctx, diagram, bead);
+  }
+}
+
+function drawBeadOnEdge(ctx: CanvasRenderingContext2D, diagram: Diagram, bead: Bead) {
   if (bead.position.type !== 'on-edge') return;
 
   const pos = bead.position;
@@ -503,6 +511,55 @@ function drawBead(ctx: CanvasRenderingContext2D, diagram: Diagram, bead: Bead) {
 
   ctx.beginPath();
   ctx.arc(beadPos.x, beadPos.y, 8, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.shadowBlur = 0;
+}
+
+function drawBeadInFeedback(ctx: CanvasRenderingContext2D, diagram: Diagram, bead: Bead) {
+  if (bead.position.type !== 'in-feedback') return;
+
+  const pos = bead.position;
+  const tracePair = diagram.tracePairs.find(tp => tp.id === pos.tracePairId);
+  if (!tracePair) return;
+
+  const traceOut = diagram.nodes.find(n => n.id === tracePair.traceOutNodeId);
+  const traceIn = diagram.nodes.find(n => n.id === tracePair.traceInNodeId);
+  if (!traceOut || !traceIn) return;
+
+  const traceOutDims = NODE_DIMENSIONS[traceOut.type];
+  const traceInDims = NODE_DIMENSIONS[traceIn.type];
+
+  const startX = traceOut.position.x + traceOutDims.width / 2;
+  const startY = traceOut.position.y - 10;
+  const endX = traceIn.position.x + traceInDims.width / 2;
+  const endY = traceIn.position.y - 10;
+
+  const midY = Math.min(startY, endY) - 40;
+  
+  const t = bead.position.progress;
+  let beadX: number, beadY: number;
+  
+  if (t < 0.33) {
+    const segT = t / 0.33;
+    beadX = startX;
+    beadY = startY + (midY - startY) * segT;
+  } else if (t < 0.67) {
+    const segT = (t - 0.33) / 0.34;
+    beadX = startX + (endX - startX) * segT;
+    beadY = midY;
+  } else {
+    const segT = (t - 0.67) / 0.33;
+    beadX = endX;
+    beadY = midY + (endY - midY) * segT;
+  }
+
+  ctx.fillStyle = BEAD_COLORS[bead.kind];
+  ctx.shadowColor = BEAD_COLORS[bead.kind];
+  ctx.shadowBlur = 15;
+
+  ctx.beginPath();
+  ctx.arc(beadX, beadY, 8, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.shadowBlur = 0;

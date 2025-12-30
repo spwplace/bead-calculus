@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import type { Diagram, Node, Edge, BeadKind } from '../core/diagram';
-import { createNode, createEdge, createDiagram, createPort, resetIdCounter } from '../core/diagram';
+import { createNode, createEdge, createDiagram, createPort, createTracePair, resetIdCounter } from '../core/diagram';
 import type { Bead, SimulationState } from '../core/simulation';
 import { stepSimulation, createBead } from '../core/simulation';
 
@@ -42,28 +42,32 @@ interface GameState {
 function createInitialDiagram(): Diagram {
   resetIdCounter();
 
-  const identity1 = createNode('identity', { x: 100, y: 150 });
-  const delay1 = createNode('delay', { x: 200, y: 100 });
-  const split1 = createNode('split', { x: 300, y: 150 });
-  const merge1 = createNode('merge', { x: 450, y: 150 });
-  const identity2 = createNode('identity', { x: 550, y: 150 });
+  const input = createNode('identity', { x: 50, y: 150 });
+  const traceIn = createNode('trace-in', { x: 150, y: 150 });
+  const delay = createNode('delay', { x: 250, y: 150 });
+  const split = createNode('split', { x: 350, y: 150 });
+  const traceOut = createNode('trace-out', { x: 450, y: 100 });
+  const output = createNode('identity', { x: 450, y: 220 });
+
+  const tracePair = createTracePair(traceIn.id, traceOut.id, 'signal');
 
   const edges = [
-    createEdge(identity1.id, identity1.outputs[0].id, delay1.id, delay1.inputs[0].id),
-    createEdge(delay1.id, delay1.outputs[0].id, split1.id, split1.inputs[0].id),
-    createEdge(split1.id, split1.outputs[0].id, merge1.id, merge1.inputs[0].id),
-    createEdge(split1.id, split1.outputs[1].id, merge1.id, merge1.inputs[1].id),
-    createEdge(merge1.id, merge1.outputs[0].id, identity2.id, identity2.inputs[0].id),
+    createEdge(input.id, input.outputs[0].id, traceIn.id, traceIn.inputs[0].id),
+    createEdge(traceIn.id, traceIn.outputs[0].id, delay.id, delay.inputs[0].id),
+    createEdge(delay.id, delay.outputs[0].id, split.id, split.inputs[0].id),
+    createEdge(split.id, split.outputs[0].id, traceOut.id, traceOut.inputs[0].id),
+    createEdge(split.id, split.outputs[1].id, output.id, output.inputs[0].id),
   ];
 
   const boundaryInput = createPort('signal', 'input');
   const boundaryOutput = createPort('signal', 'output');
 
   return createDiagram(
-    [identity1, delay1, split1, merge1, identity2],
+    [input, traceIn, delay, split, traceOut, output],
     edges,
     [boundaryInput],
-    [boundaryOutput]
+    [boundaryOutput],
+    [tracePair]
   );
 }
 
@@ -92,6 +96,9 @@ export const useGameStore = create<GameState>()(
           nodes: state.diagram.nodes.filter((n) => n.id !== nodeId),
           edges: state.diagram.edges.filter(
             (e) => e.from.nodeId !== nodeId && e.to.nodeId !== nodeId
+          ),
+          tracePairs: state.diagram.tracePairs.filter(
+            (tp) => tp.traceInNodeId !== nodeId && tp.traceOutNodeId !== nodeId
           ),
         },
       })),
